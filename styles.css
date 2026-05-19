@@ -800,6 +800,25 @@ label {
   font-weight: 700;
 }
 
+.installment-row {
+  align-items: end;
+}
+
+.installment-hint {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  flex: 1.15;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(69, 229, 143, 0.055);
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 9px 12px;
+}
+
 .primary-button {
   display: inline-flex;
   min-height: 46px;
@@ -1200,6 +1219,21 @@ tbody tr:hover {
 .amount-expense {
   color: var(--red);
   font-weight: 800;
+}
+
+.installment-badge {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  margin-left: 8px;
+  border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+  border-radius: 999px;
+  background: rgba(69, 229, 143, 0.08);
+  color: var(--green);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 
 .delete-button {

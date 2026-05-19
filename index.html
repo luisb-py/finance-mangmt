@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Minha Gestão Financeira</title>
-    <link rel="stylesheet" href="styles.css?v=9" />
+    <link rel="stylesheet" href="styles.css?v=10" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -248,6 +248,14 @@
               Pagar/receber por
               <select id="transactionSource"></select>
             </label>
+
+            <div class="field-row installment-row hidden" id="installmentRow">
+              <label>
+                Parcelas no cartão
+                <input id="transactionInstallments" type="number" min="1" max="60" step="1" value="1" />
+              </label>
+              <div class="installment-hint" id="installmentHint">1 lançamento no mês selecionado.</div>
+            </div>
 
             <button class="primary-button" type="submit">
               <span data-icon="plus"></span>

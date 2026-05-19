@@ -114,23 +114,23 @@ function bindForms() {
   document.getElementById("transactionForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const [sourceType, sourceId] = getValue("transactionSource").split(":");
-    state.transactions.push({
-      id: makeId(),
-      description: getValue("transactionDescription"),
-      type: getValue("transactionType"),
-      amount: Number(getValue("transactionAmount")),
-      date: getValue("transactionDate"),
-      category: getValue("transactionCategory"),
-      sourceType,
-      sourceId,
-    });
+    const type = getValue("transactionType");
+    const amount = Number(getValue("transactionAmount"));
+    const installments = sourceType === "card" && type === "expense" ? getInstallmentCount() : 1;
+    state.transactions.push(...buildTransactionEntries({ sourceType, sourceId, type, amount, installments }));
     event.target.reset();
     setDefaultDate();
+    document.getElementById("transactionInstallments").value = 1;
+    updateInstallmentControls();
     persistAndRender();
   });
 
   document.getElementById("transactionSearch").addEventListener("input", renderTransactions);
   document.getElementById("monthFilter").addEventListener("change", renderDashboard);
+  document.getElementById("transactionSource").addEventListener("change", updateInstallmentControls);
+  document.getElementById("transactionType").addEventListener("change", updateInstallmentControls);
+  document.getElementById("transactionAmount").addEventListener("input", updateInstallmentControls);
+  document.getElementById("transactionInstallments").addEventListener("input", updateInstallmentControls);
 
   document.getElementById("seedDemo").addEventListener("click", () => {
     state = demoState();
@@ -699,6 +699,7 @@ function renderSourceOptions() {
   source.innerHTML = options.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
   source.disabled = options.length === 0;
   submit.disabled = options.length === 0;
+  updateInstallmentControls();
 }
 
 function renderImportSourceOptions() {
@@ -761,10 +762,11 @@ function renderTransactions() {
     .map((transaction) => {
       const amountClass = transaction.type === "income" ? "amount-income" : "amount-expense";
       const sign = transaction.type === "income" ? "+" : "-";
+      const installmentLabel = transaction.installmentCount > 1 ? ` <span class="installment-badge">${transaction.installmentIndex}/${transaction.installmentCount}</span>` : "";
       return `
         <tr>
           <td>${formatDate(transaction.date)}</td>
-          <td>${escapeHtml(transaction.description)}</td>
+          <td>${escapeHtml(transaction.description)}${installmentLabel}</td>
           <td>${escapeHtml(transaction.category)}</td>
           <td>${escapeHtml(sourceName(transaction))}</td>
           <td class="${amountClass}">${sign} ${money.format(transaction.amount)}</td>
@@ -778,7 +780,14 @@ function renderTransactions() {
   hydrateIcons(table);
   table.querySelectorAll("[data-delete-transaction]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.transactions = state.transactions.filter((transaction) => transaction.id !== button.dataset.deleteTransaction);
+      const transaction = state.transactions.find((item) => item.id === button.dataset.deleteTransaction);
+      if (transaction?.installmentGroupId && transaction.installmentCount > 1) {
+        const message = `Excluir todas as ${transaction.installmentCount} parcelas desta compra?`;
+        if (!confirm(message)) return;
+        state.transactions = state.transactions.filter((item) => item.installmentGroupId !== transaction.installmentGroupId);
+      } else {
+        state.transactions = state.transactions.filter((item) => item.id !== button.dataset.deleteTransaction);
+      }
       persistAndRender();
     });
   });
@@ -1421,11 +1430,100 @@ function calculateAccounts() {
 
 function calculateCards() {
   return state.cards.map((card) => {
-    const used = sum(state.transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === card.id && transaction.type === "expense"));
+    const used = calculateCardUsed(card.id);
     const available = card.limit - used;
     const usedPercent = card.limit ? (used / card.limit) * 100 : 0;
     return { ...card, used, available, usedPercent };
   });
+}
+
+function calculateCardUsed(cardId) {
+  const installments = new Map();
+  let total = 0;
+  state.transactions
+    .filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId && transaction.type === "expense")
+    .forEach((transaction) => {
+      if (transaction.installmentGroupId && transaction.installmentTotal) {
+        installments.set(transaction.installmentGroupId, Number(transaction.installmentTotal));
+        return;
+      }
+      total += Number(transaction.amount || 0);
+    });
+  return total + [...installments.values()].reduce((acc, value) => acc + value, 0);
+}
+
+function buildTransactionEntries({ sourceType, sourceId, type, amount, installments }) {
+  const description = getValue("transactionDescription");
+  const date = getValue("transactionDate");
+  const category = getValue("transactionCategory");
+  if (installments <= 1) {
+    return [{
+      id: makeId(),
+      description,
+      type,
+      amount,
+      date,
+      category,
+      sourceType,
+      sourceId,
+    }];
+  }
+
+  const groupId = makeId();
+  const values = splitInstallmentValues(amount, installments);
+  return values.map((value, index) => ({
+    id: makeId(),
+    description,
+    type,
+    amount: value,
+    date: addMonths(date, index),
+    category,
+    sourceType,
+    sourceId,
+    installmentGroupId: groupId,
+    installmentIndex: index + 1,
+    installmentCount: installments,
+    installmentTotal: amount,
+  }));
+}
+
+function updateInstallmentControls() {
+  const row = document.getElementById("installmentRow");
+  const hint = document.getElementById("installmentHint");
+  const sourceValue = document.getElementById("transactionSource")?.value || "";
+  const type = getValue("transactionType");
+  const isCardExpense = sourceValue.startsWith("card:") && type === "expense";
+  row?.classList.toggle("hidden", !isCardExpense);
+  if (!hint) return;
+
+  const amount = Number(getValue("transactionAmount") || 0);
+  const installments = getInstallmentCount();
+  const monthlyValue = installments > 0 ? amount / installments : amount;
+  hint.textContent = isCardExpense && installments > 1
+    ? `${installments} lançamentos mensais de ${money.format(monthlyValue)}. O limite usado será ${money.format(amount)}.`
+    : "Compras no cartão podem ser lançadas em parcelas mensais.";
+}
+
+function getInstallmentCount() {
+  const raw = Number(getValue("transactionInstallments") || 1);
+  return Math.min(60, Math.max(1, Math.floor(raw || 1)));
+}
+
+function splitInstallmentValues(total, count) {
+  const cents = Math.round(total * 100);
+  const base = Math.floor(cents / count);
+  const remainder = cents - base * count;
+  return Array.from({ length: count }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
+}
+
+function addMonths(date, monthOffset) {
+  const [year, month, day] = date.split("-").map(Number);
+  const result = new Date(year, month - 1 + monthOffset, day);
+  if (result.getDate() !== day) result.setDate(0);
+  const resultYear = result.getFullYear();
+  const resultMonth = String(result.getMonth() + 1).padStart(2, "0");
+  const resultDay = String(result.getDate()).padStart(2, "0");
+  return `${resultYear}-${resultMonth}-${resultDay}`;
 }
 
 function sourceName(transaction) {
