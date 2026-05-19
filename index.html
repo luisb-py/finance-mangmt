@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Minha Gestão Financeira</title>
-    <link rel="stylesheet" href="styles.css?v=10" />
+    <link rel="stylesheet" href="styles.css?v=11" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -123,6 +123,10 @@
           <div class="dashboard-filters">
             <span class="month-filter-icon" data-icon="calendar"></span>
             <select id="monthFilter" aria-label="Filtrar mês"></select>
+          </div>
+          <div class="dashboard-filters card-dashboard-filter">
+            <span class="month-filter-icon" data-icon="card"></span>
+            <select id="dashboardCardFilter" aria-label="Filtrar cartão"></select>
           </div>
         </div>
 
@@ -318,7 +322,7 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Crédito</p>
-                <h2>Novo cartão</h2>
+                <h2 id="cardFormTitle">Novo cartão</h2>
               </div>
             </div>
 
@@ -336,10 +340,13 @@
                 <input id="cardCloseDay" type="number" min="1" max="31" value="10" required />
               </label>
             </div>
-            <button class="primary-button" type="submit">
-              <span data-icon="plus"></span>
-              Cadastrar cartão
-            </button>
+            <div class="form-actions">
+              <button class="primary-button" type="submit">
+                <span data-icon="plus" id="cardSubmitIcon"></span>
+                <span id="cardSubmitText">Cadastrar cartão</span>
+              </button>
+              <button class="secondary-button hidden" id="cancelCardEdit" type="button">Cancelar</button>
+            </div>
           </form>
 
           <section class="panel table-panel">
@@ -541,6 +548,40 @@
 
     </main>
 
+    <section class="calculator-widget" id="calculatorWidget" aria-label="Calculadora de parcelas">
+      <button class="calculator-fab" id="toggleCalculator" type="button" title="Calculadora de parcelas">
+        <span data-icon="calculator"></span>
+      </button>
+      <div class="calculator-panel" id="calculatorPanel" aria-hidden="true">
+        <div class="ai-header">
+          <div>
+            <p class="eyebrow">Calculadora</p>
+            <h2>Valor total</h2>
+          </div>
+          <button class="icon-button" id="closeCalculator" type="button" title="Fechar">
+            <span data-icon="close"></span>
+          </button>
+        </div>
+        <div class="calculator-body">
+          <div class="field-row">
+            <label>
+              Valor da parcela
+              <input id="calculatorInstallmentValue" type="number" min="0" step="0.01" placeholder="0,00" />
+            </label>
+            <label>
+              Parcelas
+              <input id="calculatorInstallmentCount" type="number" min="1" max="60" step="1" value="1" />
+            </label>
+          </div>
+          <div class="calculator-result">
+            <span>Total da compra</span>
+            <strong id="calculatorTotal">R$ 0,00</strong>
+          </div>
+          <button class="secondary-button" id="useCalculatorTotal" type="button">Usar no lançamento</button>
+        </div>
+      </div>
+    </section>
+
     <section class="ai-widget" id="aiWidget" aria-label="Assistente financeiro">
       <button class="ai-fab" id="toggleAiChat" type="button" title="Abrir IA financeira">
         <span data-icon="brain"></span>
@@ -581,6 +622,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=16"></script>
+    <script src="app.js?v=17"></script>
   </body>
 </html>

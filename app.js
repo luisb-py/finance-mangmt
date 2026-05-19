@@ -11,6 +11,7 @@ let importPreview = [];
 let aiPreviousResponseId = null;
 let investmentPreviousResponseId = null;
 let authMode = "login";
+let editingCardId = null;
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -33,6 +34,8 @@ const icons = {
   bank: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 10 9-6 9 6"/><path d="M5 10v9"/><path d="M19 10v9"/><path d="M3 19h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/></svg>',
   card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h3"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  calculator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>',
   trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
@@ -47,10 +50,12 @@ document.addEventListener("DOMContentLoaded", () => {
   bindTabs();
   bindForms();
   bindAiChat();
+  bindCalculator();
   initScrollAnimations();
   syncLoginState();
   setDefaultDate();
   render();
+  updateCalculatorVisibility(document.querySelector(".nav-tab.active")?.dataset.tab || "dashboard");
   window.addEventListener("resize", debounce(scheduleDashboardRender, 120));
 });
 
@@ -79,6 +84,7 @@ function bindTabs() {
       document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("active"));
       button.classList.add("active");
       document.getElementById(button.dataset.tab).classList.add("active");
+      updateCalculatorVisibility(button.dataset.tab);
       if (button.dataset.tab === "dashboard") {
         scheduleDashboardRender();
       }
@@ -100,16 +106,22 @@ function bindForms() {
 
   document.getElementById("cardForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    state.cards.push({
-      id: makeId(),
+    const payload = {
       name: getValue("cardName"),
       limit: Number(getValue("cardLimit")),
       closeDay: Number(getValue("cardCloseDay")),
-    });
+    };
+    if (editingCardId) {
+      state.cards = state.cards.map((card) => (card.id === editingCardId ? { ...card, ...payload } : card));
+    } else {
+      state.cards.push({ id: makeId(), ...payload });
+    }
     event.target.reset();
     document.getElementById("cardCloseDay").value = 10;
+    resetCardForm();
     persistAndRender();
   });
+  document.getElementById("cancelCardEdit").addEventListener("click", resetCardForm);
 
   document.getElementById("transactionForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -131,6 +143,7 @@ function bindForms() {
   document.getElementById("transactionType").addEventListener("change", updateInstallmentControls);
   document.getElementById("transactionAmount").addEventListener("input", updateInstallmentControls);
   document.getElementById("transactionInstallments").addEventListener("input", updateInstallmentControls);
+  document.getElementById("dashboardCardFilter").addEventListener("change", renderDashboard);
 
   document.getElementById("seedDemo").addEventListener("click", () => {
     state = demoState();
@@ -164,6 +177,28 @@ function bindForms() {
   document.getElementById("saveInvestmentProfile").addEventListener("click", saveInvestmentProfile);
   document.getElementById("generateInvestmentPlan").addEventListener("click", generateInvestmentPlan);
   document.getElementById("askInvestmentAi").addEventListener("click", askInvestmentQuestion);
+}
+
+function bindCalculator() {
+  const widget = document.getElementById("calculatorWidget");
+  const panel = document.getElementById("calculatorPanel");
+  document.getElementById("toggleCalculator").addEventListener("click", () => {
+    widget.classList.toggle("open");
+    panel.setAttribute("aria-hidden", widget.classList.contains("open") ? "false" : "true");
+    updateCalculatorResult();
+  });
+  document.getElementById("closeCalculator").addEventListener("click", () => {
+    widget.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+  });
+  document.getElementById("calculatorInstallmentValue").addEventListener("input", updateCalculatorResult);
+  document.getElementById("calculatorInstallmentCount").addEventListener("input", updateCalculatorResult);
+  document.getElementById("useCalculatorTotal").addEventListener("click", () => {
+    const total = calculatorTotalValue();
+    document.getElementById("transactionAmount").value = total ? total.toFixed(2) : "";
+    document.getElementById("transactionInstallments").value = Math.max(1, Number(getValue("calculatorInstallmentCount") || 1));
+    updateInstallmentControls();
+  });
 }
 
 function initTheme() {
@@ -684,12 +719,24 @@ function render() {
   renderSourceOptions();
   renderImportSourceOptions();
   renderMonthFilter();
+  renderDashboardCardFilter();
   renderDashboard();
   renderTransactions();
   renderAccountsAndCards();
   renderImportPreview();
   loadInvestmentProfile();
   renderInvestmentSummary();
+}
+
+function renderDashboardCardFilter() {
+  const select = document.getElementById("dashboardCardFilter");
+  if (!select) return;
+  const current = select.value || "all";
+  select.innerHTML = [
+    `<option value="all">Todos os cartões</option>`,
+    ...state.cards.map((card) => `<option value="${card.id}">${escapeHtml(card.name)}</option>`),
+  ].join("");
+  select.value = current === "all" || state.cards.some((card) => card.id === current) ? current : "all";
 }
 
 function renderSourceOptions() {
@@ -732,10 +779,14 @@ function renderMonthFilter() {
 
 function renderDashboard() {
   const month = document.getElementById("monthFilter").value;
+  const selectedCard = document.getElementById("dashboardCardFilter")?.value || "all";
   const transactions = state.transactions.filter((transaction) => transaction.date.startsWith(month));
-  const income = sum(transactions.filter((item) => item.type === "income"));
-  const expense = sum(transactions.filter((item) => item.type === "expense"));
-  const cardOpenTotal = calculateCardOpenTotal(transactions);
+  const dashboardTransactions = selectedCard === "all"
+    ? transactions
+    : transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === selectedCard);
+  const income = sum(dashboardTransactions.filter((item) => item.type === "income"));
+  const expense = sum(dashboardTransactions.filter((item) => item.type === "expense"));
+  const cardOpenTotal = calculateCardOpenTotal(dashboardTransactions);
   const allBalance = calculateAccounts().reduce((total, account) => total + account.balance, 0);
 
   setText("totalIncome", money.format(income));
@@ -747,8 +798,8 @@ function renderDashboard() {
   renderSummaryLists();
   if (!isDashboardVisible()) return;
 
-  renderCashflowChart(transactions);
-  renderCategoryChart(transactions);
+  renderCashflowChart(dashboardTransactions);
+  renderCategoryChart(dashboardTransactions);
 }
 
 function renderTransactions() {
@@ -815,7 +866,10 @@ function renderAccountsAndCards() {
     <div class="list-item">
       <div class="list-row">
         <strong>${escapeHtml(card.name)}</strong>
-        <button class="delete-button" data-delete-card="${card.id}" title="Excluir"><span data-icon="trash"></span></button>
+        <span class="list-actions">
+          <button class="edit-button" data-edit-card="${card.id}" title="Editar"><span data-icon="edit"></span></button>
+          <button class="delete-button" data-delete-card="${card.id}" title="Excluir"><span data-icon="trash"></span></button>
+        </span>
       </div>
       <div class="list-row subtle">
         <span>Fechamento</span>
@@ -842,7 +896,9 @@ function renderSummaryLists() {
     </div>
   `);
 
-  renderCollection("cardSummary", calculateCards(), (card) => `
+  const selectedCard = document.getElementById("dashboardCardFilter")?.value || "all";
+  const cards = calculateCards().filter((card) => selectedCard === "all" || card.id === selectedCard);
+  renderCollection("cardSummary", cards, (card) => `
     <div class="list-item">
       <div class="list-row">
         <strong>${escapeHtml(card.name)}</strong>
@@ -875,6 +931,56 @@ function bindDeleteButtons() {
       persistAndRender();
     });
   });
+  document.querySelectorAll("[data-edit-card]").forEach((button) => {
+    button.addEventListener("click", () => startCardEdit(button.dataset.editCard));
+  });
+}
+
+function startCardEdit(cardId) {
+  const card = state.cards.find((item) => item.id === cardId);
+  if (!card) return;
+  editingCardId = cardId;
+  document.getElementById("cardName").value = card.name;
+  document.getElementById("cardLimit").value = card.limit;
+  document.getElementById("cardCloseDay").value = card.closeDay;
+  document.getElementById("cardFormTitle").textContent = "Editar cartão";
+  document.getElementById("cardSubmitText").textContent = "Salvar cartão";
+  document.getElementById("cardSubmitIcon").dataset.icon = "check";
+  document.getElementById("cancelCardEdit").classList.remove("hidden");
+  hydrateIcons(document.getElementById("cardForm"));
+  document.getElementById("cardForm").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetCardForm() {
+  editingCardId = null;
+  document.getElementById("cardForm").reset();
+  document.getElementById("cardCloseDay").value = 10;
+  document.getElementById("cardFormTitle").textContent = "Novo cartão";
+  document.getElementById("cardSubmitText").textContent = "Cadastrar cartão";
+  document.getElementById("cardSubmitIcon").dataset.icon = "plus";
+  document.getElementById("cancelCardEdit").classList.add("hidden");
+  hydrateIcons(document.getElementById("cardForm"));
+}
+
+function updateCalculatorResult() {
+  document.getElementById("calculatorTotal").textContent = money.format(calculatorTotalValue());
+}
+
+function updateCalculatorVisibility(activeTab) {
+  const widget = document.getElementById("calculatorWidget");
+  if (!widget) return;
+  const visible = activeTab === "transactions";
+  widget.classList.toggle("is-available", visible);
+  if (!visible) {
+    widget.classList.remove("open");
+    document.getElementById("calculatorPanel")?.setAttribute("aria-hidden", "true");
+  }
+}
+
+function calculatorTotalValue() {
+  const value = Number(getValue("calculatorInstallmentValue") || 0);
+  const count = Math.max(1, Math.floor(Number(getValue("calculatorInstallmentCount") || 1)));
+  return value * count;
 }
 
 async function handleInvoiceFiles(event) {
