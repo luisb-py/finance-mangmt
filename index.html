@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Minha Gestão Financeira</title>
-    <link rel="stylesheet" href="styles.css?v=12" />
+    <link rel="stylesheet" href="styles.css?v=13" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -278,7 +278,10 @@
               </div>
               <input class="search" id="transactionSearch" type="search" placeholder="Buscar" />
             </div>
-            <div class="table-wrap">
+            <div class="table-scroll-top" id="transactionsScrollTop" aria-hidden="true">
+              <div></div>
+            </div>
+            <div class="table-wrap" id="transactionsTableWrap">
               <table>
                 <thead>
                   <tr>
@@ -625,6 +628,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=18"></script>
+    <script src="app.js?v=19"></script>
   </body>
 </html>

@@ -52,12 +52,14 @@ document.addEventListener("DOMContentLoaded", () => {
   bindForms();
   bindAiChat();
   bindCalculator();
+  bindTableScroll();
   initScrollAnimations();
   syncLoginState();
   setDefaultDate();
   render();
   updateCalculatorVisibility(document.querySelector(".nav-tab.active")?.dataset.tab || "dashboard");
   window.addEventListener("resize", debounce(scheduleDashboardRender, 120));
+  window.addEventListener("resize", debounce(syncTransactionsTableScroll, 120));
 });
 
 function loadState() {
@@ -88,6 +90,9 @@ function bindTabs() {
       updateCalculatorVisibility(button.dataset.tab);
       if (button.dataset.tab === "dashboard") {
         scheduleDashboardRender();
+      }
+      if (button.dataset.tab === "transactions") {
+        requestAnimationFrame(syncTransactionsTableScroll);
       }
     });
   });
@@ -210,6 +215,19 @@ function bindCalculator() {
     document.getElementById("transactionAmount").value = total ? total.toFixed(2) : "";
     document.getElementById("transactionInstallments").value = Math.max(1, Number(getValue("calculatorInstallmentCount") || 1));
     updateInstallmentControls();
+  });
+}
+
+function bindTableScroll() {
+  const tableWrap = document.getElementById("transactionsTableWrap");
+  const topScroll = document.getElementById("transactionsScrollTop");
+  if (!tableWrap || !topScroll) return;
+
+  tableWrap.addEventListener("scroll", () => {
+    topScroll.scrollLeft = tableWrap.scrollLeft;
+  });
+  topScroll.addEventListener("scroll", () => {
+    tableWrap.scrollLeft = topScroll.scrollLeft;
   });
 }
 
@@ -846,6 +864,7 @@ function renderTransactions() {
   const table = document.getElementById("transactionsTable");
   table.innerHTML = rows.join("") || `<tr><td colspan="6">${emptyStateMarkup()}</td></tr>`;
   hydrateIcons(table);
+  syncTransactionsTableScroll();
   table.querySelectorAll("[data-edit-transaction]").forEach((button) => {
     button.addEventListener("click", () => startTransactionEdit(button.dataset.editTransaction));
   });
@@ -862,6 +881,17 @@ function renderTransactions() {
       persistAndRender();
     });
   });
+}
+
+function syncTransactionsTableScroll() {
+  const tableWrap = document.getElementById("transactionsTableWrap");
+  const topScroll = document.getElementById("transactionsScrollTop");
+  const table = tableWrap?.querySelector("table");
+  const topInner = topScroll?.firstElementChild;
+  if (!tableWrap || !topScroll || !table || !topInner) return;
+
+  topInner.style.width = `${table.scrollWidth}px`;
+  topScroll.classList.toggle("is-needed", table.scrollWidth > tableWrap.clientWidth + 2);
 }
 
 function renderAccountsAndCards() {
