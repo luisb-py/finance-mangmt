@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minha Gestão Financeira</title>
+    <link rel="stylesheet" href="styles.css?v=9" />
+  </head>
+  <body>
+    <section class="login-screen" id="loginScreen">
+      <form class="login-card" id="loginForm">
+        <div class="login-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <img class="brand-logo brand-logo-light" src="assets/logo-white.png" alt="" />
+            <img class="brand-logo brand-logo-dark" src="assets/logo-green-dark.png" alt="" />
+          </div>
+          <div>
+            <strong>Finanças</strong>
+            <span>Pessoal</span>
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow">Acesso local</p>
+          <h1 id="authTitle">Entre no seu painel</h1>
+        </div>
+        <div class="auth-switch" role="tablist" aria-label="Modo de acesso">
+          <button class="active" id="showLogin" type="button">Entrar</button>
+          <button id="showRegister" type="button">Registrar</button>
+        </div>
+        <label class="register-only hidden">
+          Usuário
+          <input id="registerUsername" type="text" placeholder="Seu usuário" autocomplete="username" />
+        </label>
+        <label>
+          Email
+          <input id="loginEmail" type="email" placeholder="voce@email.com" autocomplete="email" required />
+        </label>
+        <label>
+          Senha
+          <input id="loginPassword" type="password" placeholder="Digite qualquer senha" autocomplete="current-password" required />
+        </label>
+        <button class="primary-button" type="submit">
+          <span data-icon="lock"></span>
+          <span id="authSubmitText">Entrar</span>
+        </button>
+        <p class="login-note" id="authStatus">Use seu cadastro do Supabase para acessar o painel.</p>
+      </form>
+    </section>
+
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <img class="brand-logo brand-logo-light" src="assets/logo-white.png" alt="" />
+          <img class="brand-logo brand-logo-dark" src="assets/logo-green-dark.png" alt="" />
+        </div>
+        <div>
+          <strong>Finanças</strong>
+          <span>Pessoal</span>
+        </div>
+      </div>
+
+      <nav class="nav-tabs" aria-label="Navegação principal">
+        <button class="nav-tab active" data-tab="dashboard" title="Dashboard">
+          <span data-icon="dashboard"></span>
+          Dashboard
+        </button>
+        <button class="nav-tab" data-tab="transactions" title="Entradas e saídas">
+          <span data-icon="transactions"></span>
+          Movimentos
+        </button>
+        <button class="nav-tab" data-tab="accounts" title="Contas e cartões">
+          <span data-icon="wallet"></span>
+          Contas e cartões
+        </button>
+        <button class="nav-tab" data-tab="import" title="Importar faturas">
+          <span data-icon="upload"></span>
+          Importar
+        </button>
+        <button class="nav-tab" data-tab="investments" title="Investimentos">
+          <span data-icon="trend"></span>
+          Investir
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span>Saldo atual</span>
+        <strong id="sidebarBalance">R$ 0,00</strong>
+      </div>
+    </aside>
+
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Visão financeira</p>
+          <h1>Controle pessoal simples</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="theme-toggle" id="themeToggle" type="button" title="Alternar tema" aria-label="Alternar tema">
+            <span class="theme-toggle-track">
+              <span class="theme-toggle-thumb">
+                <span data-icon="moon"></span>
+              </span>
+            </span>
+          </button>
+          <button class="icon-button" id="seedDemo" title="Inserir exemplo">
+            <span data-icon="sparkles"></span>
+          </button>
+          <button class="icon-button danger" id="clearData" title="Limpar dados">
+            <span data-icon="trash"></span>
+          </button>
+          <button class="icon-button" id="logoutButton" title="Sair">
+            <span data-icon="lock"></span>
+          </button>
+        </div>
+      </header>
+
+      <section class="tab-panel active" id="dashboard">
+        <div class="dashboard-toolbar">
+          <div>
+            <p class="eyebrow">Painel</p>
+            <strong>Resumo do mês</strong>
+          </div>
+          <div class="dashboard-filters">
+            <span class="month-filter-icon" data-icon="calendar"></span>
+            <select id="monthFilter" aria-label="Filtrar mês"></select>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric income">
+            <div>
+              <span>Entradas</span>
+              <strong id="totalIncome">R$ 0,00</strong>
+              <small>Receitas confirmadas</small>
+            </div>
+            <div class="metric-icon"><span data-icon="arrowUp"></span></div>
+          </article>
+          <article class="metric expense">
+            <div>
+              <span>Saídas</span>
+              <strong id="totalExpense">R$ 0,00</strong>
+              <small>Gastos no período</small>
+            </div>
+            <div class="metric-icon"><span data-icon="arrowDown"></span></div>
+          </article>
+          <article class="metric balance">
+            <div>
+              <span>Resultado</span>
+              <strong id="netBalance">R$ 0,00</strong>
+              <small>Entradas menos saídas</small>
+            </div>
+            <div class="metric-icon"><span data-icon="bank"></span></div>
+          </article>
+          <article class="metric cards">
+            <div>
+              <span>Faturas em aberto</span>
+              <strong id="cardOpenTotal">R$ 0,00</strong>
+              <small>Cartões de crédito</small>
+            </div>
+            <div class="metric-icon"><span data-icon="card"></span></div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="panel wide">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Mês atual</p>
+                <h2>Entradas x saídas</h2>
+              </div>
+            </div>
+            <canvas id="cashflowChart" height="240"></canvas>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Categorias</p>
+                <h2>Para onde foi</h2>
+              </div>
+            </div>
+            <canvas id="categoryChart" height="300"></canvas>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Contas</p>
+                <h2>Saldos</h2>
+              </div>
+            </div>
+            <div class="list" id="accountSummary"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Cartões</p>
+                <h2>Limite disponível</h2>
+              </div>
+            </div>
+            <div class="list" id="cardSummary"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="transactions">
+        <div class="work-grid">
+          <form class="panel form-panel" id="transactionForm">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Cadastro</p>
+                <h2>Nova movimentação</h2>
+              </div>
+            </div>
+
+            <label>
+              Descrição
+              <input id="transactionDescription" type="text" placeholder="Ex.: Supermercado" required />
+            </label>
+
+            <div class="field-row">
+              <label>
+                Tipo
+                <select id="transactionType">
+                  <option value="income">Entrada</option>
+                  <option value="expense">Saída</option>
+                </select>
+              </label>
+              <label>
+                Valor
+                <input id="transactionAmount" type="number" min="0.01" step="0.01" placeholder="0,00" required />
+              </label>
+            </div>
+
+            <div class="field-row">
+              <label>
+                Data
+                <input id="transactionDate" type="date" required />
+              </label>
+              <label>
+                Categoria
+                <input id="transactionCategory" type="text" placeholder="Ex.: Moradia" required />
+              </label>
+            </div>
+
+            <label>
+              Pagar/receber por
+              <select id="transactionSource"></select>
+            </label>
+
+            <button class="primary-button" type="submit">
+              <span data-icon="plus"></span>
+              Adicionar
+            </button>
+          </form>
+
+          <section class="panel table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Histórico</p>
+                <h2>Movimentações</h2>
+              </div>
+              <input class="search" id="transactionSearch" type="search" placeholder="Buscar" />
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Origem</th>
+                    <th>Valor</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="transactionsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="accounts">
+        <div class="work-grid two">
+          <form class="panel form-panel" id="accountForm">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Banco, carteira ou reserva</p>
+                <h2>Nova conta</h2>
+              </div>
+            </div>
+
+            <label>
+              Nome
+              <input id="accountName" type="text" placeholder="Ex.: Nubank" required />
+            </label>
+            <label>
+              Saldo inicial
+              <input id="accountBalance" type="number" step="0.01" placeholder="0,00" required />
+            </label>
+            <button class="primary-button" type="submit">
+              <span data-icon="plus"></span>
+              Cadastrar conta
+            </button>
+          </form>
+
+          <form class="panel form-panel" id="cardForm">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Crédito</p>
+                <h2>Novo cartão</h2>
+              </div>
+            </div>
+
+            <label>
+              Nome
+              <input id="cardName" type="text" placeholder="Ex.: Visa Inter" required />
+            </label>
+            <div class="field-row">
+              <label>
+                Limite
+                <input id="cardLimit" type="number" min="0" step="0.01" placeholder="0,00" required />
+              </label>
+              <label>
+                Fechamento
+                <input id="cardCloseDay" type="number" min="1" max="31" value="10" required />
+              </label>
+            </div>
+            <button class="primary-button" type="submit">
+              <span data-icon="plus"></span>
+              Cadastrar cartão
+            </button>
+          </form>
+
+          <section class="panel table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Disponível</p>
+                <h2>Minhas contas</h2>
+              </div>
+            </div>
+            <div class="list" id="accountsList"></div>
+          </section>
+
+          <section class="panel table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Crédito</p>
+                <h2>Meus cartões</h2>
+              </div>
+            </div>
+            <div class="list" id="cardsList"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="import">
+        <div class="work-grid">
+          <section class="panel form-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">PDF da fatura</p>
+                <h2>Importar lançamentos</h2>
+              </div>
+            </div>
+
+            <label class="upload-zone" for="invoiceFile">
+              <span data-icon="upload"></span>
+              <strong>Selecionar PDF</strong>
+              <small>Funciona melhor com PDFs pesquisáveis. Faturas escaneadas podem exigir colar o texto abaixo.</small>
+              <input id="invoiceFile" type="file" accept="application/pdf,.pdf" multiple />
+            </label>
+
+            <label>
+              Texto da fatura
+              <textarea id="invoicePaste" rows="8" placeholder="Cole aqui o texto da fatura se o PDF não for reconhecido automaticamente."></textarea>
+            </label>
+
+            <div class="field-row">
+              <label>
+                Lançar em
+                <select id="importSource"></select>
+              </label>
+              <label>
+                Tipo padrão
+                <select id="importDefaultType">
+                  <option value="expense">Saída</option>
+                  <option value="income">Entrada</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Categoria padrão
+              <input id="importDefaultCategory" type="text" value="Fatura" />
+            </label>
+
+            <div class="import-actions">
+              <button class="primary-button" id="parseInvoiceText" type="button">
+                <span data-icon="sparkles"></span>
+                Analisar texto
+              </button>
+              <button class="icon-button" id="clearImportPreview" type="button" title="Limpar prévia">
+                <span data-icon="trash"></span>
+              </button>
+            </div>
+
+            <p class="import-status" id="importStatus">Aguardando arquivo ou texto da fatura.</p>
+          </section>
+
+          <section class="panel table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Prévia</p>
+                <h2>Lançamentos encontrados</h2>
+              </div>
+              <button class="primary-button compact" id="importSelectedRows" type="button">
+                <span data-icon="check"></span>
+                Importar
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Tipo</th>
+                    <th>Valor</th>
+                  </tr>
+                </thead>
+                <tbody id="importPreviewTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="investments">
+        <div class="work-grid">
+          <section class="panel form-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Assessoria IA</p>
+                <h2>Perfil de investimento</h2>
+              </div>
+            </div>
+
+            <label>
+              Objetivo
+              <select id="investmentGoal">
+                <option value="reserva">Montar reserva de emergência</option>
+                <option value="renda">Gerar renda futura</option>
+                <option value="patrimonio">Crescer patrimônio</option>
+                <option value="aposentadoria">Planejar aposentadoria</option>
+              </select>
+            </label>
+
+            <div class="field-row">
+              <label>
+                Perfil de risco
+                <select id="riskProfile">
+                  <option value="conservador">Conservador</option>
+                  <option value="moderado">Moderado</option>
+                  <option value="arrojado">Arrojado</option>
+                </select>
+              </label>
+              <label>
+                Horizonte
+                <select id="investmentHorizon">
+                  <option value="curto">Até 1 ano</option>
+                  <option value="medio">1 a 5 anos</option>
+                  <option value="longo">Mais de 5 anos</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-row">
+              <label>
+                Aporte mensal pretendido
+                <input id="monthlyInvestment" type="number" min="0" step="50" value="300" />
+              </label>
+              <label>
+                Reserva atual
+                <input id="emergencyReserve" type="number" min="0" step="100" value="0" />
+              </label>
+            </div>
+
+            <label>
+              Observações
+              <textarea id="investmentNotes" rows="5" placeholder="Ex.: Quero evitar risco alto, tenho dívida no cartão, pretendo comprar um imóvel em 3 anos."></textarea>
+            </label>
+
+            <button class="primary-button" id="saveInvestmentProfile" type="button">
+              <span data-icon="check"></span>
+              Salvar perfil
+            </button>
+            <p class="import-status" id="investmentStatus">A IA usa seu perfil e seus dados financeiros para orientar próximos passos.</p>
+          </section>
+
+          <section class="panel table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Plano</p>
+                <h2>Orientação de investimento</h2>
+              </div>
+              <button class="primary-button compact" id="generateInvestmentPlan" type="button">
+                <span data-icon="brain"></span>
+                Gerar plano
+              </button>
+            </div>
+
+            <div class="investment-cards" id="investmentSummary"></div>
+
+            <div class="coach-chat">
+              <label>
+                Pergunte sobre investimentos
+                <textarea id="investmentQuestion" rows="3" placeholder="Ex.: Devo investir agora ou montar reserva primeiro?"></textarea>
+              </label>
+              <button class="primary-button" id="askInvestmentAi" type="button">
+                <span data-icon="send"></span>
+                Perguntar
+              </button>
+              <div class="coach-answer" id="investmentAnswer"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+    </main>
+
+    <section class="ai-widget" id="aiWidget" aria-label="Assistente financeiro">
+      <button class="ai-fab" id="toggleAiChat" type="button" title="Abrir IA financeira">
+        <span data-icon="brain"></span>
+      </button>
+      <div class="ai-panel" id="aiPanel" aria-hidden="true">
+        <div class="ai-header">
+          <div>
+            <p class="eyebrow">IA financeira</p>
+            <h2>Assistente</h2>
+          </div>
+          <button class="icon-button" id="closeAiChat" type="button" title="Fechar">
+            <span data-icon="close"></span>
+          </button>
+        </div>
+        <div class="ai-messages" id="aiMessages">
+          <div class="ai-message assistant">Olá. Posso analisar suas entradas, saídas, faturas e categorias para sugerir próximos passos.</div>
+        </div>
+        <div class="ai-suggestions">
+          <button type="button" data-ai-prompt="Como posso economizar mais este mês?">Economizar</button>
+          <button type="button" data-ai-prompt="Minha fatura do cartão está saudável?">Cartão</button>
+          <button type="button" data-ai-prompt="Quais gastos devo revisar primeiro?">Prioridades</button>
+        </div>
+        <form class="ai-input-row" id="aiChatForm">
+          <input id="aiQuestion" type="text" placeholder="Pergunte sobre suas finanças" autocomplete="off" />
+          <button class="primary-button compact" type="submit">
+            <span data-icon="send"></span>
+          </button>
+        </form>
+        <p class="ai-footnote" id="aiStatus">Conectado ao endpoint local /api/ai quando o servidor estiver ativo.</p>
+      </div>
+    </section>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <span data-icon="empty"></span>
+        <strong>Nada cadastrado ainda</strong>
+        <p>Adicione seus primeiros dados ou use o botão de exemplo no topo.</p>
+      </div>
+    </template>
+
+    <script src="app.js?v=15"></script>
+  </body>
+</html>
