@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Minha Gestão Financeira</title>
-    <link rel="stylesheet" href="styles.css?v=11" />
+    <link rel="stylesheet" href="styles.css?v=12" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -214,7 +214,7 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Cadastro</p>
-                <h2>Nova movimentação</h2>
+                <h2 id="transactionFormTitle">Nova movimentação</h2>
               </div>
             </div>
 
@@ -261,10 +261,13 @@
               <div class="installment-hint" id="installmentHint">1 lançamento no mês selecionado.</div>
             </div>
 
-            <button class="primary-button" type="submit">
-              <span data-icon="plus"></span>
-              Adicionar
-            </button>
+            <div class="form-actions">
+              <button class="primary-button" type="submit">
+                <span data-icon="plus" id="transactionSubmitIcon"></span>
+                <span id="transactionSubmitText">Adicionar</span>
+              </button>
+              <button class="secondary-button hidden" id="cancelTransactionEdit" type="button">Cancelar</button>
+            </div>
           </form>
 
           <section class="panel table-panel">
@@ -622,6 +625,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=17"></script>
+    <script src="app.js?v=18"></script>
   </body>
 </html>

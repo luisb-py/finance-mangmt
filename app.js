@@ -12,6 +12,7 @@ let aiPreviousResponseId = null;
 let investmentPreviousResponseId = null;
 let authMode = "login";
 let editingCardId = null;
+let editingTransaction = null;
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -129,13 +130,20 @@ function bindForms() {
     const type = getValue("transactionType");
     const amount = Number(getValue("transactionAmount"));
     const installments = sourceType === "card" && type === "expense" ? getInstallmentCount() : 1;
-    state.transactions.push(...buildTransactionEntries({ sourceType, sourceId, type, amount, installments }));
-    event.target.reset();
-    setDefaultDate();
-    document.getElementById("transactionInstallments").value = 1;
-    updateInstallmentControls();
+    const entries = buildTransactionEntries({ sourceType, sourceId, type, amount, installments });
+    if (editingTransaction) {
+      state.transactions = state.transactions.filter((transaction) => {
+        if (editingTransaction.mode === "group") {
+          return transaction.installmentGroupId !== editingTransaction.groupId;
+        }
+        return transaction.id !== editingTransaction.id;
+      });
+    }
+    state.transactions.push(...entries);
+    resetTransactionForm();
     persistAndRender();
   });
+  document.getElementById("cancelTransactionEdit").addEventListener("click", resetTransactionForm);
 
   document.getElementById("transactionSearch").addEventListener("input", renderTransactions);
   document.getElementById("monthFilter").addEventListener("change", renderDashboard);
@@ -147,12 +155,16 @@ function bindForms() {
 
   document.getElementById("seedDemo").addEventListener("click", () => {
     state = demoState();
+    resetTransactionForm();
+    resetCardForm();
     persistAndRender();
   });
 
   document.getElementById("clearData").addEventListener("click", () => {
     if (confirm("Deseja apagar todos os dados cadastrados?")) {
       state = structuredClone(initialState);
+      resetTransactionForm();
+      resetCardForm();
       persistAndRender();
     }
   });
@@ -821,7 +833,12 @@ function renderTransactions() {
           <td>${escapeHtml(transaction.category)}</td>
           <td>${escapeHtml(sourceName(transaction))}</td>
           <td class="${amountClass}">${sign} ${money.format(transaction.amount)}</td>
-          <td><button class="delete-button" data-delete-transaction="${transaction.id}" title="Excluir"><span data-icon="trash"></span></button></td>
+          <td>
+            <span class="list-actions">
+              <button class="edit-button" data-edit-transaction="${transaction.id}" title="Editar"><span data-icon="edit"></span></button>
+              <button class="delete-button" data-delete-transaction="${transaction.id}" title="Excluir"><span data-icon="trash"></span></button>
+            </span>
+          </td>
         </tr>
       `;
     });
@@ -829,6 +846,9 @@ function renderTransactions() {
   const table = document.getElementById("transactionsTable");
   table.innerHTML = rows.join("") || `<tr><td colspan="6">${emptyStateMarkup()}</td></tr>`;
   hydrateIcons(table);
+  table.querySelectorAll("[data-edit-transaction]").forEach((button) => {
+    button.addEventListener("click", () => startTransactionEdit(button.dataset.editTransaction));
+  });
   table.querySelectorAll("[data-delete-transaction]").forEach((button) => {
     button.addEventListener("click", () => {
       const transaction = state.transactions.find((item) => item.id === button.dataset.deleteTransaction);
@@ -960,6 +980,50 @@ function resetCardForm() {
   document.getElementById("cardSubmitIcon").dataset.icon = "plus";
   document.getElementById("cancelCardEdit").classList.add("hidden");
   hydrateIcons(document.getElementById("cardForm"));
+}
+
+function startTransactionEdit(transactionId) {
+  const transaction = state.transactions.find((item) => item.id === transactionId);
+  if (!transaction) return;
+  const isGroup = transaction.installmentGroupId && transaction.installmentCount > 1;
+  const editGroup = isGroup && confirm(`Editar todas as ${transaction.installmentCount} parcelas desta compra?`);
+  const groupItems = isGroup
+    ? state.transactions
+      .filter((item) => item.installmentGroupId === transaction.installmentGroupId)
+      .sort((a, b) => a.installmentIndex - b.installmentIndex)
+    : [transaction];
+  const base = editGroup ? groupItems[0] : transaction;
+  editingTransaction = editGroup
+    ? { mode: "group", id: transaction.id, groupId: transaction.installmentGroupId }
+    : { mode: "single", id: transaction.id };
+
+  document.getElementById("transactionDescription").value = base.description;
+  document.getElementById("transactionType").value = base.type;
+  document.getElementById("transactionAmount").value = editGroup ? (base.installmentTotal || sum(groupItems)).toFixed(2) : base.amount;
+  document.getElementById("transactionDate").value = base.date;
+  document.getElementById("transactionCategory").value = base.category;
+  document.getElementById("transactionSource").value = `${base.sourceType}:${base.sourceId}`;
+  document.getElementById("transactionInstallments").value = editGroup ? base.installmentCount : 1;
+  document.getElementById("transactionFormTitle").textContent = editGroup ? "Editar compra parcelada" : "Editar movimentação";
+  document.getElementById("transactionSubmitText").textContent = "Salvar movimentação";
+  document.getElementById("transactionSubmitIcon").dataset.icon = "check";
+  document.getElementById("cancelTransactionEdit").classList.remove("hidden");
+  updateInstallmentControls();
+  hydrateIcons(document.getElementById("transactionForm"));
+  document.getElementById("transactionForm").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetTransactionForm() {
+  editingTransaction = null;
+  document.getElementById("transactionForm").reset();
+  setDefaultDate();
+  document.getElementById("transactionInstallments").value = 1;
+  document.getElementById("transactionFormTitle").textContent = "Nova movimentação";
+  document.getElementById("transactionSubmitText").textContent = "Adicionar";
+  document.getElementById("transactionSubmitIcon").dataset.icon = "plus";
+  document.getElementById("cancelTransactionEdit").classList.add("hidden");
+  updateInstallmentControls();
+  hydrateIcons(document.getElementById("transactionForm"));
 }
 
 function updateCalculatorResult() {
