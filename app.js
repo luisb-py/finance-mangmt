@@ -735,7 +735,7 @@ function renderDashboard() {
   const transactions = state.transactions.filter((transaction) => transaction.date.startsWith(month));
   const income = sum(transactions.filter((item) => item.type === "income"));
   const expense = sum(transactions.filter((item) => item.type === "expense"));
-  const cardOpenTotal = sum(transactions.filter((item) => item.sourceType === "card" && item.type === "expense"));
+  const cardOpenTotal = calculateCardOpenTotal(transactions);
   const allBalance = calculateAccounts().reduce((total, account) => total + account.balance, 0);
 
   setText("totalIncome", money.format(income));
@@ -1000,7 +1000,7 @@ function financialStats() {
   const transactions = state.transactions.filter((transaction) => transaction.date.startsWith(month));
   const income = sum(transactions.filter((item) => item.type === "income"));
   const expense = sum(transactions.filter((item) => item.type === "expense"));
-  const cardOpenTotal = sum(transactions.filter((item) => item.sourceType === "card" && item.type === "expense"));
+  const cardOpenTotal = calculateCardOpenTotal(transactions);
   const categories = transactions
     .filter((item) => item.type === "expense")
     .reduce((acc, item) => {
@@ -1439,17 +1439,30 @@ function calculateCards() {
 
 function calculateCardUsed(cardId) {
   const installments = new Map();
-  let total = 0;
+  let expenseTotal = 0;
+  let creditTotal = 0;
   state.transactions
-    .filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId && transaction.type === "expense")
+    .filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId)
     .forEach((transaction) => {
+      if (transaction.type === "income") {
+        creditTotal += Number(transaction.amount || 0);
+        return;
+      }
+      if (transaction.type !== "expense") return;
       if (transaction.installmentGroupId && transaction.installmentTotal) {
         installments.set(transaction.installmentGroupId, Number(transaction.installmentTotal));
         return;
       }
-      total += Number(transaction.amount || 0);
+      expenseTotal += Number(transaction.amount || 0);
     });
-  return total + [...installments.values()].reduce((acc, value) => acc + value, 0);
+  const committedExpenses = expenseTotal + [...installments.values()].reduce((acc, value) => acc + value, 0);
+  return Math.max(0, committedExpenses - creditTotal);
+}
+
+function calculateCardOpenTotal(transactions) {
+  const cardExpenses = sum(transactions.filter((transaction) => transaction.sourceType === "card" && transaction.type === "expense"));
+  const cardCredits = sum(transactions.filter((transaction) => transaction.sourceType === "card" && transaction.type === "income"));
+  return Math.max(0, cardExpenses - cardCredits);
 }
 
 function buildTransactionEntries({ sourceType, sourceId, type, amount, installments }) {
