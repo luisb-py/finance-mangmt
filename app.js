@@ -1109,11 +1109,14 @@ function addAiMessage(text, type) {
 }
 
 async function askRealAi(question, mode = "finance") {
-  const previousResponseId = mode === "investment"
-    ? investmentPreviousResponseId
-    : mode === "decision"
-      ? decisionPreviousResponseId
-      : aiPreviousResponseId;
+  const freshThread = shouldStartFreshAiThread(question, mode);
+  const previousResponseId = freshThread
+    ? null
+    : mode === "investment"
+      ? investmentPreviousResponseId
+      : mode === "decision"
+        ? decisionPreviousResponseId
+        : aiPreviousResponseId;
   const response = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1130,6 +1133,9 @@ async function askRealAi(question, mode = "finance") {
   }
 
   const data = await readJsonResponse(response);
+  if (freshThread) {
+    return data.answer || "Não consegui gerar uma resposta agora.";
+  }
   if (mode === "investment") {
     investmentPreviousResponseId = data.responseId || investmentPreviousResponseId;
   } else if (mode === "decision") {
@@ -1138,6 +1144,12 @@ async function askRealAi(question, mode = "finance") {
     aiPreviousResponseId = data.responseId || aiPreviousResponseId;
   }
   return data.answer || "Não consegui gerar uma resposta agora.";
+}
+
+function shouldStartFreshAiThread(question, mode) {
+  if (mode === "decision") return true;
+  const lowerQuestion = question.toLowerCase();
+  return /comprar|financiar|parcelar|parcela|sal[aá]rio|renda|pc gamer|notebook|celular|viagem/.test(lowerQuestion);
 }
 
 async function readJsonResponse(response) {
@@ -1248,10 +1260,8 @@ function localAiFallback(question) {
     return `Sua fatura em aberto está em ${money.format(stats.cardOpenTotal)}. Isso representa ${stats.income ? Math.round((stats.cardOpenTotal / stats.income) * 100) : 0}% das entradas do mês. Comece revisando gastos no cartão nas maiores categorias: ${formatCategoryList(topCategories)}.`;
   }
 
-  if (/carro|ve[ií]culo|comprar|financiar|entrada/.test(lowerQuestion)) {
-    const diagnostics = buildFinancialDiagnostics(stats);
-    const monthlyRoom = Math.max(0, stats.net);
-    return `Para pensar em comprar um carro, eu olharia primeiro sua folga mensal: hoje ela está em ${money.format(stats.net)}. Seus maiores gastos são ${formatCategoryList(topCategories)}. Se a parcela, seguro e manutenção passarem de ${money.format(monthlyRoom * 0.5)}, o orçamento fica apertado. Antes de avançar, eu definiria valor de entrada, custo mensal total do carro e manteria pelo menos 3 a 6 meses de gastos em reserva; hoje sua reserva estimada cobre ${diagnostics.reserveMonths} mês(es).`;
+  if (/carro|ve[ií]culo|comprar|financiar|entrada|parcela|parcelar|pc gamer|notebook|celular|viagem/.test(lowerQuestion)) {
+    return localPurchaseFallback(question, stats, topCategories);
   }
 
   if (/econom|guardar|poupar|sobrando|sobra/.test(lowerQuestion)) {
@@ -1268,6 +1278,66 @@ function localAiFallback(question) {
   }
 
   return "Cadastre mais entradas, saídas e faturas para eu conseguir analisar com mais precisão. Com poucos dados, eu só consigo orientar de forma geral.";
+}
+
+function localPurchaseFallback(question, stats, topCategories) {
+  const diagnostics = buildFinancialDiagnostics(stats);
+  const subject = purchaseSubject(question);
+  const installment = parseInstallmentFromQuestion(question);
+  const informedIncome = parseIncomeFromQuestion(question);
+  const baseIncome = informedIncome || stats.income;
+  const installmentPressure = installment && baseIncome ? (installment / baseIncome) * 100 : 0;
+  const availableRoom = Math.max(0, stats.net);
+  const maxSaferInstallment = baseIncome ? baseIncome * 0.12 : availableRoom * 0.5;
+  const risks = [
+    stats.net <= 0 ? `seu resultado do mês está negativo em ${money.format(Math.abs(stats.net))}` : null,
+    installment && baseIncome && installmentPressure > 20 ? `a parcela de ${money.format(installment)} consome ${Math.round(installmentPressure)}% da renda considerada` : null,
+    diagnostics.cardPressure > 35 ? `a fatura aberta já equivale a ${diagnostics.cardPressure}% das entradas do mês` : null,
+    diagnostics.reserveMonths < 3 ? "sua reserva estimada ainda está abaixo de 3 meses de gastos" : null,
+  ].filter(Boolean);
+
+  const directAnswer = risks.length
+    ? `Eu ajustaria ou adiaria a compra do ${subject} por enquanto.`
+    : `A compra do ${subject} parece mais viável, mas eu ainda colocaria um teto claro para a parcela.`;
+  const incomeText = informedIncome ? `com o salário informado de ${money.format(informedIncome)}` : `considerando suas entradas registradas de ${money.format(stats.income)}`;
+  const installmentText = installment
+    ? `A parcela citada é ${money.format(installment)}; ${incomeText}, isso pesa cerca de ${Math.round(installmentPressure)}% ao mês.`
+    : `Eu calcularia a parcela máxima saudável em torno de ${money.format(maxSaferInstallment)} antes de fechar.`;
+  const saferPath = `Um caminho mais seguro seria mirar uma parcela perto de ${money.format(maxSaferInstallment)}, ou juntar entrada até a parcela cair sem apertar o caixa.`;
+  const categoryText = topCategories.length ? ` Seus maiores gastos hoje são ${formatCategoryList(topCategories)}.` : "";
+
+  return `${directAnswer} ${installmentText} ${risks.length ? `Pontos de atenção: ${risks.join("; ")}.` : "Ponto positivo: seus números não mostram uma trava forte neste mês."}${categoryText} ${saferPath}`;
+}
+
+function purchaseSubject(question) {
+  const normalized = question.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/comprar\s+(?:um|uma|o|a)?\s*([^?.,]+?)(?:\s+com|\s+por|\s+considerando|\s+em|\?|$)/i);
+  if (!match) return "item";
+  return match[1].trim().toLowerCase();
+}
+
+function parseInstallmentFromQuestion(question) {
+  return parseFirstMoneyMatch(question, [
+    /parcela[s]?\s+(?:de|em|por)?\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
+    /(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)\s*(?:reais)?\s+(?:de|por)?\s*parcela/i,
+  ]);
+}
+
+function parseIncomeFromQuestion(question) {
+  return parseFirstMoneyMatch(question, [
+    /sal[aá]rio\s+l[ií]quido\s*(?:de|é|e)?\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
+    /renda\s+(?:l[ií]quida\s+)?(?:de|é|e)?\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
+    /ganho\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
+    /recebo\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
+  ]);
+}
+
+function parseFirstMoneyMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return parseMoney(match[1]);
+  }
+  return 0;
 }
 
 function formatCategoryList(categories) {

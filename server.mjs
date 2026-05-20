@@ -679,7 +679,7 @@ function buildInstructions(mode) {
   }
 
   if (mode === "decision") {
-    return `${base} Você está no planejador de decisão. Ajude a pessoa a decidir se deve comprar, parcelar, viajar, comprar carro ou começar um investimento. Use o fluxo: 1) resposta direta: avançar, ajustar ou adiar; 2) impacto mensal em reais e percentuais quando houver dados; 3) riscos para fatura, reserva e fluxo de caixa; 4) uma alternativa mais segura; 5) próximos passos objetivos. Não incentive endividamento arriscado. Se faltar dado crítico, faça uma pergunta curta no fim.`;
+    return `${base} Você está no planejador de decisão. Avalie somente a decisão atual da pessoa, sem reaproveitar exemplos antigos. Ajude a decidir se deve comprar, parcelar, viajar, trocar de equipamento, começar um investimento ou adiar. Use o fluxo: 1) resposta direta: avançar, ajustar ou adiar; 2) impacto mensal em reais e percentuais quando houver dados; 3) riscos para fatura, reserva e fluxo de caixa; 4) uma alternativa mais segura; 5) próximos passos objetivos. Não incentive endividamento arriscado. Se faltar dado crítico, faça uma pergunta curta no fim.`;
   }
 
   return `${base} Para finanças pessoais, priorize fluxo de caixa, orçamento, categorias de gasto, fatura do cartão, reserva de emergência e hábitos simples. Não dê recomendação de investimento específica nesta área; encaminhe para a área de investimentos quando a pergunta for sobre investir.`;
