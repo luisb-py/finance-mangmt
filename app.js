@@ -13,12 +13,14 @@ let state = loadState();
 let importPreview = [];
 let aiPreviousResponseId = null;
 let investmentPreviousResponseId = null;
+let decisionPreviousResponseId = null;
 let authMode = "login";
 let editingCardId = null;
 let editingTransaction = null;
 let selectedInvoiceCardId = null;
 let remoteSaveTimer = null;
 let isLoadingRemoteData = false;
+let deferredInstallPrompt = null;
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -44,6 +46,7 @@ const icons = {
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   calculator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>',
   receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V3Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>',
   trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
@@ -59,6 +62,8 @@ document.addEventListener("DOMContentLoaded", () => {
   bindForms();
   bindAiChat();
   bindCalculator();
+  bindQuickEntry();
+  bindPwaInstall();
   bindTableScroll();
   initScrollAnimations();
   syncLoginState();
@@ -70,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateCalculatorVisibility(document.querySelector(".nav-tab.active")?.dataset.tab || "dashboard");
   window.addEventListener("resize", debounce(scheduleDashboardRender, 120));
   window.addEventListener("resize", debounce(syncTransactionsTableScroll, 120));
+  registerServiceWorker();
 });
 
 function loadState() {
@@ -370,6 +376,7 @@ function bindForms() {
   document.getElementById("saveInvestmentProfile").addEventListener("click", saveInvestmentProfile);
   document.getElementById("generateInvestmentPlan").addEventListener("click", generateInvestmentPlan);
   document.getElementById("askInvestmentAi").addEventListener("click", askInvestmentQuestion);
+  document.getElementById("generateDecisionPlan").addEventListener("click", generateDecisionPlan);
 }
 
 function bindCalculator() {
@@ -392,6 +399,69 @@ function bindCalculator() {
     document.getElementById("transactionInstallments").value = Math.max(1, Number(getValue("calculatorInstallmentCount") || 1));
     updateInstallmentControls();
   });
+}
+
+function bindQuickEntry() {
+  const widget = document.getElementById("quickEntryWidget");
+  const panel = document.getElementById("quickEntryPanel");
+  const toggle = document.getElementById("toggleQuickEntry");
+  const close = document.getElementById("closeQuickEntry");
+  const mobileQuick = document.getElementById("mobileQuickAction");
+  const open = () => {
+    widget.classList.add("open");
+    panel.setAttribute("aria-hidden", "false");
+    document.getElementById("quickTransactionAmount").focus();
+  };
+  const closePanel = () => {
+    widget.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+  };
+  toggle.addEventListener("click", () => (widget.classList.contains("open") ? closePanel() : open()));
+  close.addEventListener("click", closePanel);
+  mobileQuick?.addEventListener("click", open);
+
+  document.getElementById("quickEntryForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const [sourceType, sourceId] = getValue("quickTransactionSource").split(":");
+    state.transactions.push({
+      id: makeId(),
+      description: getValue("quickTransactionDescription"),
+      type: getValue("quickTransactionType"),
+      amount: Number(getValue("quickTransactionAmount")),
+      date: new Date().toISOString().slice(0, 10),
+      category: getValue("quickTransactionCategory"),
+      sourceType,
+      sourceId,
+    });
+    event.target.reset();
+    closePanel();
+    persistAndRender();
+  });
+}
+
+function bindPwaInstall() {
+  const button = document.getElementById("installAppButton");
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    button.classList.remove("hidden");
+  });
+  button.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice.catch(() => null);
+    deferredInstallPrompt = null;
+    button.classList.add("hidden");
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    button.classList.add("hidden");
+  });
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/service-worker.js").catch(() => {});
 }
 
 function bindTableScroll() {
@@ -561,7 +631,11 @@ function addAiMessage(text, type) {
 }
 
 async function askRealAi(question, mode = "finance") {
-  const previousResponseId = mode === "investment" ? investmentPreviousResponseId : aiPreviousResponseId;
+  const previousResponseId = mode === "investment"
+    ? investmentPreviousResponseId
+    : mode === "decision"
+      ? decisionPreviousResponseId
+      : aiPreviousResponseId;
   const response = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -580,6 +654,8 @@ async function askRealAi(question, mode = "finance") {
   const data = await readJsonResponse(response);
   if (mode === "investment") {
     investmentPreviousResponseId = data.responseId || investmentPreviousResponseId;
+  } else if (mode === "decision") {
+    decisionPreviousResponseId = data.responseId || decisionPreviousResponseId;
   } else {
     aiPreviousResponseId = data.responseId || aiPreviousResponseId;
   }
@@ -605,6 +681,7 @@ function buildAiContext() {
   return {
     stats,
     investmentProfile: getInvestmentProfile(),
+    decisionContext: document.getElementById("decisionType") ? getDecisionContext() : null,
     diagnostics: buildFinancialDiagnostics(stats),
     categoryBreakdown: categoryBreakdown(),
     monthlyTrend: monthlyTrend(),
@@ -822,6 +899,59 @@ async function askInvestmentQuestion() {
   }
 }
 
+async function generateDecisionPlan() {
+  const answer = document.getElementById("decisionAnswer");
+  const decision = getDecisionContext();
+  if (!decision.amount && !decision.notes) {
+    answer.textContent = "Informe pelo menos um valor ou contexto para a IA avaliar a decisão.";
+    return;
+  }
+
+  answer.textContent = "Analisando sua decisão com a IA...";
+  try {
+    const prompt = [
+      `Tipo de decisão: ${decision.type}`,
+      `Valor estimado: ${money.format(decision.amount || 0)}`,
+      `Prazo: ${decision.deadline || "não informado"}`,
+      `Parcelas: ${decision.installments || "não informado"}`,
+      `Contexto: ${decision.notes || "não informado"}`,
+      "Avalie se cabe no orçamento, riscos para reserva/fatura, limite de parcela saudável e próximos passos.",
+    ].join("\n");
+    answer.textContent = await askRealAi(prompt, "decision");
+  } catch {
+    answer.textContent = localDecisionFallback(decision);
+  }
+}
+
+function getDecisionContext() {
+  return {
+    type: getValue("decisionType"),
+    amount: Number(getValue("decisionAmount") || 0),
+    deadline: getValue("decisionDeadline"),
+    installments: Number(getValue("decisionInstallments") || 0),
+    notes: getValue("decisionNotes"),
+  };
+}
+
+function localDecisionFallback(decision) {
+  const stats = financialStats();
+  const diagnostics = buildFinancialDiagnostics(stats);
+  const installment = decision.installments ? decision.amount / decision.installments : decision.amount;
+  const pressure = stats.income ? (installment / stats.income) * 100 : 0;
+  const risk = [
+    stats.net <= 0 ? "seu mês está sem sobra positiva" : null,
+    diagnostics.reserveMonths < 3 ? "sua reserva ainda está abaixo de 3 meses de gastos" : null,
+    diagnostics.cardPressure > 35 ? "a fatura atual já pressiona sua renda" : null,
+    pressure > 12 ? "a parcela ficaria acima de 12% das entradas do mês" : null,
+  ].filter(Boolean);
+
+  if (risk.length) {
+    return `Eu teria cautela com essa decisão. A parcela estimada seria ${money.format(installment)}, cerca de ${Math.round(pressure)}% das entradas do mês. Pontos de atenção: ${risk.join(", ")}. Próximo passo: simule uma parcela menor, aumente a entrada ou adie até a reserva/fatura ficarem mais confortáveis.`;
+  }
+
+  return `A decisão parece caber melhor no seu momento atual. Valor estimado: ${money.format(decision.amount)}; parcela aproximada: ${money.format(installment)}. Ainda assim, eu colocaria uma regra: só avançar se mantiver reserva, fatura sob controle e resultado mensal positivo após a compra.`;
+}
+
 function localInvestmentFallback() {
   const profile = getInvestmentProfile();
   const stats = financialStats();
@@ -960,6 +1090,8 @@ function renderSourceOptions() {
   const submit = document.querySelector("#transactionForm .primary-button");
   const recurringSource = document.getElementById("recurringSource");
   const recurringSubmit = document.querySelector("#recurringForm .primary-button");
+  const quickSource = document.getElementById("quickTransactionSource");
+  const quickSubmit = document.querySelector("#quickEntryForm .primary-button");
   const options = sourceOptions();
   source.innerHTML = options.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
   source.disabled = options.length === 0;
@@ -968,6 +1100,11 @@ function renderSourceOptions() {
     recurringSource.innerHTML = options.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
     recurringSource.disabled = options.length === 0;
     recurringSubmit.disabled = options.length === 0;
+  }
+  if (quickSource && quickSubmit) {
+    quickSource.innerHTML = options.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
+    quickSource.disabled = options.length === 0;
+    quickSubmit.disabled = options.length === 0;
   }
   updateInstallmentControls();
 }
@@ -1035,6 +1172,8 @@ function renderDashboard() {
   setText("netBalance", money.format(income - expense));
   setText("cardOpenTotal", money.format(cardOpenTotal));
   setText("sidebarBalance", money.format(allBalance));
+  setText("mobileBalance", money.format(allBalance));
+  setText("mobileNetBalance", money.format(income - expense));
 
   renderSummaryLists();
   if (!isDashboardVisible()) return;

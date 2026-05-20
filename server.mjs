@@ -13,6 +13,7 @@ const mime = {
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -83,7 +84,8 @@ async function handleAi(request, response) {
 
   const payload = await readJson(request);
   const question = String(payload.question || "").trim();
-  const mode = payload.mode === "investment" ? "investment" : "finance";
+  const allowedModes = new Set(["finance", "investment", "decision"]);
+  const mode = allowedModes.has(payload.mode) ? payload.mode : "finance";
   const previousResponseId = typeof payload.previousResponseId === "string" ? payload.previousResponseId : null;
   if (!question) {
     sendJson(response, 400, { error: "Pergunta vazia" });
@@ -330,6 +332,10 @@ function buildInstructions(mode) {
 
   if (mode === "investment") {
     return `${base} Você está na área de investimentos. Atue como apoio educacional e planejamento financeiro, não como consultor financeiro registrado. Não recomende comprar/vender ativos específicos, tickers, fundos ou criptomoedas. Antes de sugerir aumentar risco, verifique reserva de emergência, dívidas/fatura do cartão, horizonte, perfil de risco e capacidade de aporte. Sugira classes ou conceitos em termos gerais, como reserva, renda fixa, diversificação, liquidez e consistência de aportes. Inclua alertas de risco.`;
+  }
+
+  if (mode === "decision") {
+    return `${base} Você está no planejador de decisão. Ajude a pessoa a decidir se deve comprar, parcelar, viajar, comprar carro ou começar um investimento. Use o fluxo: 1) resposta direta: avançar, ajustar ou adiar; 2) impacto mensal em reais e percentuais quando houver dados; 3) riscos para fatura, reserva e fluxo de caixa; 4) uma alternativa mais segura; 5) próximos passos objetivos. Não incentive endividamento arriscado. Se faltar dado crítico, faça uma pergunta curta no fim.`;
   }
 
   return `${base} Para finanças pessoais, priorize fluxo de caixa, orçamento, categorias de gasto, fatura do cartão, reserva de emergência e hábitos simples. Não dê recomendação de investimento específica nesta área; encaminhe para a área de investimentos quando a pergunta for sobre investir.`;
