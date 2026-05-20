@@ -19,3 +19,15 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5.4-mini
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+      - key: STRIPE_PREMIUM_AMOUNT
+        value: "2990"
+      - key: STRIPE_CURRENCY
+        value: brl
+      - key: STRIPE_PREMIUM_PRODUCT_NAME
+        value: Premium - Minha Gestão Financeira

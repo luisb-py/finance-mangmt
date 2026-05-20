@@ -104,6 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindPwaInstall();
   bindTableScroll();
   initScrollAnimations();
+  handleStripeReturn();
   syncLoginState();
   setDefaultDate();
   render();
@@ -470,11 +471,55 @@ function bindPremiumModal() {
     item.addEventListener("click", closePremiumModal);
   });
   document.getElementById("premiumSubscribeButton")?.addEventListener("click", () => {
-    document.getElementById("premiumModalNote").textContent = "Checkout ainda não conectado. Me chame para ativar a assinatura.";
+    startStripeCheckout();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closePremiumModal();
   });
+}
+
+async function startStripeCheckout() {
+  const note = document.getElementById("premiumModalNote");
+  const button = document.getElementById("premiumSubscribeButton");
+  const session = currentSession();
+  if (!session?.accessToken) {
+    note.textContent = "Entre na sua conta antes de assinar o Premium.";
+    return;
+  }
+
+  note.textContent = "Abrindo checkout seguro do Stripe...";
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/stripe/create-checkout-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        authorization: `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify({ plan: "premium" }),
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Não foi possível abrir o checkout.");
+    window.location.href = data.url;
+  } catch (error) {
+    note.textContent = error.message || "Não foi possível abrir o checkout do Stripe.";
+    button.disabled = false;
+  }
+}
+
+function handleStripeReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get("stripe");
+  if (!result) return;
+
+  const cleanUrl = `${window.location.pathname}${window.location.hash || ""}`;
+  window.history.replaceState({}, "", cleanUrl || "/");
+  if (result === "success") {
+    setSyncStatus("pending");
+    setTimeout(() => {
+      loadRemoteAppData().catch(() => setSyncStatus("error"));
+    }, 1600);
+  }
 }
 
 function setSyncStatus(status, timestamp = null) {

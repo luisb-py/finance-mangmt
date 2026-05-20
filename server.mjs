@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 
@@ -46,6 +47,16 @@ createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/app-state") {
       await handleSaveAppState(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/stripe/create-checkout-session") {
+      await handleCreateStripeCheckoutSession(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/stripe/webhook") {
+      await handleStripeWebhook(request, response);
       return;
     }
 
@@ -267,6 +278,121 @@ async function handleSaveAppState(request, response) {
   sendJson(response, 200, { ok: true });
 }
 
+async function handleCreateStripeCheckoutSession(request, response) {
+  const auth = await authenticatedSupabaseUser(request);
+  if (auth.error) {
+    sendJson(response, auth.status, { error: auth.error });
+    return;
+  }
+
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeSecretKey) {
+    sendJson(response, 503, { error: "STRIPE_SECRET_KEY não configurada" });
+    return;
+  }
+
+  await readJson(request).catch(() => ({}));
+  const origin = request.headers.origin || appBaseUrl(request);
+  const successUrl = process.env.STRIPE_SUCCESS_URL || `${origin}/?stripe=success`;
+  const cancelUrl = process.env.STRIPE_CANCEL_URL || `${origin}/?stripe=cancel`;
+  const userId = auth.user.id;
+  const params = {
+    mode: "subscription",
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    client_reference_id: userId,
+    customer_email: auth.user.email,
+    "metadata[supabase_user_id]": userId,
+    "metadata[email]": auth.user.email || "",
+    "subscription_data[metadata][supabase_user_id]": userId,
+    "subscription_data[metadata][email]": auth.user.email || "",
+    "allow_promotion_codes": "true",
+    "line_items[0][quantity]": "1",
+  };
+
+  if (process.env.STRIPE_PREMIUM_PRICE_ID) {
+    params["line_items[0][price]"] = process.env.STRIPE_PREMIUM_PRICE_ID;
+  } else {
+    params["line_items[0][price_data][currency]"] = process.env.STRIPE_CURRENCY || "brl";
+    params["line_items[0][price_data][unit_amount]"] = process.env.STRIPE_PREMIUM_AMOUNT || "2990";
+    params["line_items[0][price_data][recurring][interval]"] = "month";
+    params["line_items[0][price_data][product_data][name]"] = process.env.STRIPE_PREMIUM_PRODUCT_NAME || "Premium - Minha Gestão Financeira";
+  }
+
+  const session = await stripeApiRequest("/v1/checkout/sessions", params);
+  if (session.error) {
+    sendJson(response, session.status || 502, { error: session.error.message || "Erro ao criar checkout no Stripe" });
+    return;
+  }
+
+  sendJson(response, 200, { url: session.url, sessionId: session.id });
+}
+
+async function handleStripeWebhook(request, response) {
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!stripeWebhookSecret) {
+    sendJson(response, 503, { error: "STRIPE_WEBHOOK_SECRET não configurado" });
+    return;
+  }
+
+  const rawBody = await readRawBody(request);
+  const signature = request.headers["stripe-signature"];
+  if (!verifyStripeSignature(rawBody, signature, stripeWebhookSecret)) {
+    sendJson(response, 400, { error: "Assinatura do Stripe inválida" });
+    return;
+  }
+
+  let event = null;
+  try {
+    event = JSON.parse(rawBody);
+  } catch {
+    sendJson(response, 400, { error: "Payload inválido" });
+    return;
+  }
+
+  try {
+    await applyStripeEvent(event);
+    sendJson(response, 200, { received: true });
+  } catch (error) {
+    console.error(error);
+    sendJson(response, 500, { error: "Erro ao processar evento do Stripe" });
+  }
+}
+
+async function applyStripeEvent(event) {
+  const object = event.data?.object || {};
+  if (event.type === "checkout.session.completed") {
+    const userId = object.client_reference_id || object.metadata?.supabase_user_id;
+    if (userId && object.mode === "subscription") {
+      await updateUserSubscription(userId, "premium", "active", {
+        stripeCustomerId: object.customer,
+        stripeSubscriptionId: object.subscription,
+      });
+    }
+    return;
+  }
+
+  if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+    const userId = object.metadata?.supabase_user_id;
+    if (!userId) return;
+    const active = ["active", "trialing"].includes(object.status);
+    await updateUserSubscription(userId, active ? "premium" : "free", active ? "active" : object.status || "inactive", {
+      stripeCustomerId: object.customer,
+      stripeSubscriptionId: object.id,
+    });
+    return;
+  }
+
+  if (event.type === "customer.subscription.deleted") {
+    const userId = object.metadata?.supabase_user_id;
+    if (!userId) return;
+    await updateUserSubscription(userId, "free", "inactive", {
+      stripeCustomerId: object.customer,
+      stripeSubscriptionId: object.id,
+    });
+  }
+}
+
 async function authenticatedSupabaseUser(request) {
   const { supabaseUrl, supabaseAnonKey } = supabaseConfig();
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -290,6 +416,95 @@ async function authenticatedSupabaseUser(request) {
   }
 
   return { user: data };
+}
+
+async function stripeApiRequest(pathname, params) {
+  const body = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      body.append(key, String(value));
+    }
+  });
+
+  const stripeResponse = await fetch(`https://api.stripe.com${pathname}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  const data = await stripeResponse.json();
+  if (!stripeResponse.ok) {
+    return { error: data.error || data, status: stripeResponse.status };
+  }
+  return data;
+}
+
+async function updateUserSubscription(userId, plan, status, stripe = {}) {
+  const { supabaseUrl, supabaseServiceRoleKey } = supabaseConfig();
+  if (!supabaseUrl || !supabaseServiceRoleKey || !userId) return;
+
+  const headers = supabaseHeaders(supabaseServiceRoleKey);
+  const currentResponse = await fetch(`${supabaseUrl}/rest/v1/app_states?user_id=eq.${userId}&select=data&limit=1`, {
+    headers: { ...headers, Accept: "application/json" },
+  });
+  const rows = currentResponse.ok ? await currentResponse.json() : [];
+  const data = rows[0]?.data || { version: 1, state: {} };
+  data.version ||= 1;
+  data.state ||= {};
+  data.state.accounts ||= [];
+  data.state.cards ||= [];
+  data.state.transactions ||= [];
+  data.state.recurringTransactions ||= [];
+  data.state.subscription = {
+    plan,
+    status,
+    updatedAt: new Date().toISOString(),
+    stripeCustomerId: stripe.stripeCustomerId || data.state.subscription?.stripeCustomerId || null,
+    stripeSubscriptionId: stripe.stripeSubscriptionId || data.state.subscription?.stripeSubscriptionId || null,
+  };
+  data.savedAt = new Date().toISOString();
+
+  await fetch(`${supabaseUrl}/rest/v1/app_states`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      data,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+}
+
+function verifyStripeSignature(rawBody, signatureHeader, secret) {
+  if (!rawBody || !signatureHeader || !secret) return false;
+  const parts = Object.fromEntries(
+    String(signatureHeader)
+      .split(",")
+      .map((part) => part.split("="))
+      .filter(([key, value]) => key && value)
+  );
+  const timestamp = parts.t;
+  const signature = parts.v1;
+  if (!timestamp || !signature) return false;
+
+  const age = Math.abs(Date.now() / 1000 - Number(timestamp));
+  if (!Number.isFinite(age) || age > 300) return false;
+
+  const expected = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  const signatureBuffer = Buffer.from(signature, "hex");
+  return expectedBuffer.length === signatureBuffer.length && timingSafeEqual(expectedBuffer, signatureBuffer);
+}
+
+function appBaseUrl(request) {
+  const protocol = request.headers["x-forwarded-proto"] || "https";
+  const host = request.headers["x-forwarded-host"] || request.headers.host;
+  return `${protocol}://${host}`;
 }
 
 function supabaseConfig() {
@@ -369,6 +584,21 @@ function readJson(request) {
         rejectRead(error);
       }
     });
+    request.on("error", rejectRead);
+  });
+}
+
+function readRawBody(request) {
+  return new Promise((resolveRead, rejectRead) => {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 1_000_000) {
+        request.destroy();
+        rejectRead(new Error("Payload muito grande"));
+      }
+    });
+    request.on("end", () => resolveRead(body));
     request.on("error", rejectRead);
   });
 }
