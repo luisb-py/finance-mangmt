@@ -438,7 +438,8 @@ body[data-theme="light"] .brand-logo-dark {
   height: 18px;
 }
 
-#monthFilter {
+#monthFilter,
+#invoiceMonthFilter {
   min-height: 46px;
   width: 100%;
   min-width: 188px;
@@ -477,7 +478,8 @@ body[data-theme="light"] .brand-logo-dark {
   cursor: pointer;
 }
 
-#monthFilter:focus {
+#monthFilter:focus,
+#invoiceMonthFilter:focus {
   box-shadow: none;
 }
 
@@ -1465,6 +1467,26 @@ tbody tr:hover {
   background: color-mix(in srgb, var(--green) 10%, var(--surface));
 }
 
+.invoice-card-button {
+  width: 100%;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.invoice-card-button.selected-list-item {
+  box-shadow:
+    inset 3px 0 0 var(--green),
+    0 16px 34px rgba(0, 0, 0, 0.16);
+}
+
+.invoice-card-button:focus-visible {
+  outline: 0;
+  border-color: rgba(69, 229, 143, 0.74);
+  box-shadow: 0 0 0 4px rgba(69, 229, 143, 0.12);
+}
+
 .list-row {
   display: flex;
   align-items: center;
@@ -1808,7 +1830,8 @@ button:hover [data-icon],
 
   .dashboard-filters select,
   #dashboardCardFilter,
-  #monthFilter {
+  #monthFilter,
+  #invoiceMonthFilter {
     min-width: 0;
     width: 100%;
   }

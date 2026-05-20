@@ -16,6 +16,7 @@ let investmentPreviousResponseId = null;
 let authMode = "login";
 let editingCardId = null;
 let editingTransaction = null;
+let selectedInvoiceCardId = null;
 let remoteSaveTimer = null;
 let isLoadingRemoteData = false;
 const money = new Intl.NumberFormat("pt-BR", {
@@ -327,7 +328,6 @@ function bindForms() {
   document.getElementById("transactionSearch").addEventListener("input", renderTransactions);
   document.getElementById("monthFilter").addEventListener("change", renderDashboard);
   document.getElementById("invoiceMonthFilter").addEventListener("change", renderInvoices);
-  document.getElementById("invoiceCardFilter").addEventListener("change", renderInvoices);
   document.getElementById("transactionSource").addEventListener("change", updateInstallmentControls);
   document.getElementById("transactionType").addEventListener("change", updateInstallmentControls);
   document.getElementById("transactionAmount").addEventListener("input", updateInstallmentControls);
@@ -1002,20 +1002,16 @@ function renderMonthFilter() {
 
 function renderInvoiceFilters() {
   const monthSelect = document.getElementById("invoiceMonthFilter");
-  const cardSelect = document.getElementById("invoiceCardFilter");
-  if (!monthSelect || !cardSelect) return;
+  if (!monthSelect) return;
   const months = transactionMonths();
   const currentMonth = monthSelect.value || document.getElementById("monthFilter")?.value || months[0] || new Date().toISOString().slice(0, 7);
   monthSelect.innerHTML = months.length
     ? months.map((month) => `<option value="${month}">${formatMonth(month)}</option>`).join("")
     : `<option value="${currentMonth}">${formatMonth(currentMonth)}</option>`;
   monthSelect.value = months.includes(currentMonth) ? currentMonth : months[0] || currentMonth;
-
-  const currentCard = cardSelect.value || state.cards[0]?.id || "";
-  cardSelect.innerHTML = state.cards.length
-    ? state.cards.map((card) => `<option value="${card.id}">${escapeHtml(card.name)}</option>`).join("")
-    : '<option value="">Nenhum cartão</option>';
-  cardSelect.value = state.cards.some((card) => card.id === currentCard) ? currentCard : state.cards[0]?.id || "";
+  if (!state.cards.some((card) => card.id === selectedInvoiceCardId)) {
+    selectedInvoiceCardId = state.cards[0]?.id || null;
+  }
 }
 
 function transactionMonths() {
@@ -1144,7 +1140,10 @@ function renderRecurringList() {
 
 function renderInvoices() {
   const month = document.getElementById("invoiceMonthFilter")?.value || new Date().toISOString().slice(0, 7);
-  const cardId = document.getElementById("invoiceCardFilter")?.value || state.cards[0]?.id || "";
+  if (!state.cards.some((item) => item.id === selectedInvoiceCardId)) {
+    selectedInvoiceCardId = state.cards[0]?.id || null;
+  }
+  const cardId = selectedInvoiceCardId || "";
   const card = state.cards.find((item) => item.id === cardId);
   const transactions = state.transactions
     .filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId && transaction.date.startsWith(month))
@@ -1182,7 +1181,7 @@ function renderInvoices() {
     const cardTotal = calculateCardOpenTotal(cardTransactions);
     return { ...item, total: cardTotal, selected: item.id === cardId };
   }), (item) => `
-    <div class="list-item ${item.selected ? "selected-list-item" : ""}">
+    <button class="list-item invoice-card-button ${item.selected ? "selected-list-item" : ""}" data-select-invoice-card="${item.id}" type="button">
       <div class="list-row">
         <strong>${escapeHtml(item.name)}</strong>
         <span>${money.format(item.total)}</span>
@@ -1191,8 +1190,14 @@ function renderInvoices() {
         <span>Fechamento dia ${item.closeDay}</span>
         <span>${invoiceDueDate(month, item.closeDay)}</span>
       </div>
-    </div>
+    </button>
   `);
+  document.querySelectorAll("[data-select-invoice-card]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedInvoiceCardId = button.dataset.selectInvoiceCard;
+      renderInvoices();
+    });
+  });
 }
 
 function renderAccountsAndCards() {
