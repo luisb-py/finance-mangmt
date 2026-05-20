@@ -72,6 +72,10 @@
           <span data-icon="wallet"></span>
           Contas e cartões
         </button>
+        <button class="nav-tab" data-tab="invoices" title="Faturas">
+          <span data-icon="receipt"></span>
+          Faturas
+        </button>
         <button class="nav-tab" data-tab="import" title="Importar faturas">
           <span data-icon="upload"></span>
           Importar
@@ -95,6 +99,10 @@
           <h1>Controle pessoal simples</h1>
         </div>
         <div class="topbar-actions">
+          <div class="sync-status" id="syncStatus" title="Status de sincronização">
+            <span class="sync-dot"></span>
+            <span id="syncStatusText">Local</span>
+          </div>
           <button class="theme-toggle" id="themeToggle" type="button" title="Alternar tema" aria-label="Alternar tema">
             <span class="theme-toggle-track">
               <span class="theme-toggle-thumb">
@@ -210,6 +218,7 @@
 
       <section class="tab-panel" id="transactions">
         <div class="work-grid">
+          <div class="form-stack">
           <form class="panel form-panel" id="transactionForm">
             <div class="panel-header">
               <div>
@@ -270,6 +279,61 @@
             </div>
           </form>
 
+          <form class="panel form-panel" id="recurringForm">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Automático</p>
+                <h2>Lançamento recorrente</h2>
+              </div>
+            </div>
+
+            <label>
+              Descrição
+              <input id="recurringDescription" type="text" placeholder="Ex.: Salário, aluguel, internet" required />
+            </label>
+
+            <div class="field-row">
+              <label>
+                Tipo
+                <select id="recurringType">
+                  <option value="income">Entrada</option>
+                  <option value="expense">Saída</option>
+                </select>
+              </label>
+              <label>
+                Valor
+                <input id="recurringAmount" type="number" min="0.01" step="0.01" placeholder="0,00" required />
+              </label>
+            </div>
+
+            <div class="field-row">
+              <label>
+                Início
+                <input id="recurringStartDate" type="date" required />
+              </label>
+              <label>
+                Repetir por
+                <input id="recurringMonths" type="number" min="1" max="60" step="1" value="12" required />
+              </label>
+            </div>
+
+            <label>
+              Categoria
+              <input id="recurringCategory" type="text" placeholder="Ex.: Moradia" required />
+            </label>
+
+            <label>
+              Pagar/receber por
+              <select id="recurringSource"></select>
+            </label>
+
+            <button class="primary-button" type="submit">
+              <span data-icon="calendar"></span>
+              Criar recorrência
+            </button>
+          </form>
+          </div>
+
           <section class="panel table-panel">
             <div class="panel-header">
               <div>
@@ -296,6 +360,103 @@
                 <tbody id="transactionsTable"></tbody>
               </table>
             </div>
+          </section>
+        </div>
+
+        <section class="panel recurring-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Recorrentes</p>
+              <h2>Próximos lançamentos automáticos</h2>
+            </div>
+          </div>
+          <div class="list" id="recurringList"></div>
+        </section>
+      </section>
+
+      <section class="tab-panel" id="invoices">
+        <div class="dashboard-toolbar">
+          <div>
+            <p class="eyebrow">Cartões</p>
+            <strong>Faturas por mês</strong>
+          </div>
+          <div class="dashboard-filters">
+            <span class="month-filter-icon" data-icon="calendar"></span>
+            <select id="invoiceMonthFilter" aria-label="Filtrar mês da fatura"></select>
+          </div>
+          <div class="dashboard-filters card-dashboard-filter">
+            <span class="month-filter-icon" data-icon="card"></span>
+            <select id="invoiceCardFilter" aria-label="Filtrar cartão da fatura"></select>
+          </div>
+        </div>
+
+        <div class="metric-grid invoice-metrics">
+          <article class="metric cards">
+            <div>
+              <span>Total da fatura</span>
+              <strong id="invoiceTotal">R$ 0,00</strong>
+              <small>Compras menos créditos</small>
+            </div>
+            <div class="metric-icon"><span data-icon="receipt"></span></div>
+          </article>
+          <article class="metric expense">
+            <div>
+              <span>Compras</span>
+              <strong id="invoiceExpenses">R$ 0,00</strong>
+              <small>Saídas no cartão</small>
+            </div>
+            <div class="metric-icon"><span data-icon="arrowDown"></span></div>
+          </article>
+          <article class="metric income">
+            <div>
+              <span>Créditos</span>
+              <strong id="invoiceCredits">R$ 0,00</strong>
+              <small>Entradas/abatimentos</small>
+            </div>
+            <div class="metric-icon"><span data-icon="arrowUp"></span></div>
+          </article>
+          <article class="metric balance">
+            <div>
+              <span>Vencimento</span>
+              <strong id="invoiceDueDate">--</strong>
+              <small>Estimado pelo fechamento</small>
+            </div>
+            <div class="metric-icon"><span data-icon="calendar"></span></div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="panel wide table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Detalhes</p>
+                <h2>Lançamentos da fatura</h2>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Cartão</th>
+                    <th>Valor</th>
+                  </tr>
+                </thead>
+                <tbody id="invoiceTransactionsTable"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Resumo</p>
+                <h2>Cartões no mês</h2>
+              </div>
+            </div>
+            <div class="list" id="invoiceCardsSummary"></div>
           </section>
         </div>
       </section>
@@ -628,6 +789,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=20"></script>
+    <script src="app.js?v=21"></script>
   </body>
 </html>

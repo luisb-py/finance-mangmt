@@ -505,6 +505,55 @@ h2 {
   gap: 10px;
 }
 
+.sync-status {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--control-bg);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 0 13px;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--muted) 14%, transparent);
+}
+
+.sync-status[data-status="loading"] .sync-dot,
+.sync-status[data-status="pending"] .sync-dot {
+  background: var(--gold);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 18%, transparent);
+}
+
+.sync-status[data-status="saved"] {
+  border-color: color-mix(in srgb, var(--green) 38%, transparent);
+  color: var(--green);
+}
+
+.sync-status[data-status="saved"] .sync-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 18%, transparent);
+}
+
+.sync-status[data-status="error"] {
+  border-color: color-mix(in srgb, var(--red) 44%, transparent);
+  color: var(--red);
+}
+
+.sync-status[data-status="error"] .sync-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 18%, transparent);
+}
+
 .icon-button {
   display: grid;
   width: 42px;
@@ -698,6 +747,12 @@ body[data-theme="light"] .theme-toggle-thumb {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.form-stack {
+  display: grid;
+  align-self: start;
+  gap: 18px;
+}
+
 .panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -807,6 +862,10 @@ label textarea:hover {
 
 .form-panel {
   align-self: start;
+}
+
+.recurring-panel {
+  margin-top: 18px;
 }
 
 form {
@@ -1401,6 +1460,11 @@ tbody tr:hover {
   transform: translateX(3px);
 }
 
+.selected-list-item {
+  border-color: color-mix(in srgb, var(--green) 44%, transparent);
+  background: color-mix(in srgb, var(--green) 10%, var(--surface));
+}
+
 .list-row {
   display: flex;
   align-items: center;
@@ -1644,7 +1708,7 @@ button:hover [data-icon],
 
   .nav-tabs {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
   }
 
@@ -1789,11 +1853,16 @@ button:hover [data-icon],
 
   .topbar-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .topbar-actions button {
     width: 100%;
+  }
+
+  .sync-status {
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 
   .nav-tab {

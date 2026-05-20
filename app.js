@@ -6,6 +6,7 @@ const initialState = {
   accounts: [],
   cards: [],
   transactions: [],
+  recurringTransactions: [],
 };
 
 let state = loadState();
@@ -41,6 +42,7 @@ const icons = {
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   calculator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>',
+  receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V3Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>',
   trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
@@ -71,7 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function loadState() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || structuredClone(initialState);
+    return normalizeState(JSON.parse(localStorage.getItem(STORAGE_KEY)) || structuredClone(initialState));
   } catch {
     return structuredClone(initialState);
   }
@@ -91,10 +93,15 @@ function currentSession() {
 }
 
 function queueRemoteSave() {
-  if (isLoadingRemoteData || !currentSession()?.accessToken) return;
+  if (isLoadingRemoteData) return;
+  if (!currentSession()?.accessToken) {
+    setSyncStatus("local");
+    return;
+  }
+  setSyncStatus("pending");
   clearTimeout(remoteSaveTimer);
   remoteSaveTimer = setTimeout(() => {
-    saveRemoteAppData().catch(() => {});
+    saveRemoteAppData().catch(() => setSyncStatus("error"));
   }, 500);
 }
 
@@ -132,6 +139,7 @@ async function loadRemoteAppData({ migrateLocal = false } = {}) {
   if (!session?.accessToken) return;
 
   isLoadingRemoteData = true;
+  setSyncStatus("loading");
   try {
     const response = await fetch("/api/app-state", {
       headers: { authorization: `Bearer ${session.accessToken}` },
@@ -147,14 +155,18 @@ async function loadRemoteAppData({ migrateLocal = false } = {}) {
       }
       loadInvestmentProfile();
       render();
+      setSyncStatus("saved", payload.updatedAt);
       return;
     }
 
     if (migrateLocal && hasLocalAppData()) {
       await saveRemoteAppData();
+    } else {
+      setSyncStatus("saved", payload.updatedAt);
     }
   } catch (error) {
     console.warn(error.message || "Falha ao sincronizar dados.");
+    setSyncStatus("error");
   } finally {
     isLoadingRemoteData = false;
   }
@@ -174,6 +186,7 @@ async function saveRemoteAppData() {
   });
   const payload = await readJsonResponse(response);
   if (!response.ok) throw new Error(payload.error || "Não foi possível salvar seus dados.");
+  setSyncStatus("saved");
 }
 
 function normalizeState(value) {
@@ -181,7 +194,32 @@ function normalizeState(value) {
     accounts: Array.isArray(value?.accounts) ? value.accounts : [],
     cards: Array.isArray(value?.cards) ? value.cards : [],
     transactions: Array.isArray(value?.transactions) ? value.transactions : [],
+    recurringTransactions: Array.isArray(value?.recurringTransactions) ? value.recurringTransactions : [],
   };
+}
+
+function setSyncStatus(status, timestamp = null) {
+  const container = document.getElementById("syncStatus");
+  const text = document.getElementById("syncStatusText");
+  if (!container || !text) return;
+  container.dataset.status = status;
+  const labels = {
+    local: "Local",
+    loading: "Carregando",
+    pending: "Sincronizando",
+    saved: timestamp ? `Salvo ${formatRelativeSyncTime(timestamp)}` : "Salvo agora",
+    error: "Erro ao salvar",
+  };
+  text.textContent = labels[status] || "Local";
+}
+
+function formatRelativeSyncTime(timestamp) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "agora";
+  const diffMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (diffMinutes < 1) return "agora";
+  if (diffMinutes === 1) return "há 1 min";
+  return `há ${diffMinutes} min`;
 }
 
 function hydrateIcons(root = document) {
@@ -203,6 +241,9 @@ function bindTabs() {
       }
       if (button.dataset.tab === "transactions") {
         requestAnimationFrame(syncTransactionsTableScroll);
+      }
+      if (button.dataset.tab === "invoices") {
+        renderInvoices();
       }
     });
   });
@@ -260,8 +301,33 @@ function bindForms() {
   });
   document.getElementById("cancelTransactionEdit").addEventListener("click", resetTransactionForm);
 
+  document.getElementById("recurringForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const [sourceType, sourceId] = getValue("recurringSource").split(":");
+    const recurring = {
+      id: makeId(),
+      description: getValue("recurringDescription"),
+      type: getValue("recurringType"),
+      amount: Number(getValue("recurringAmount")),
+      startDate: getValue("recurringStartDate"),
+      category: getValue("recurringCategory"),
+      sourceType,
+      sourceId,
+      frequency: "monthly",
+      months: Math.min(60, Math.max(1, Number(getValue("recurringMonths") || 12))),
+      createdAt: new Date().toISOString(),
+    };
+    state.recurringTransactions.push(recurring);
+    generateRecurringTransactions(recurring);
+    event.target.reset();
+    setDefaultDate();
+    persistAndRender();
+  });
+
   document.getElementById("transactionSearch").addEventListener("input", renderTransactions);
   document.getElementById("monthFilter").addEventListener("change", renderDashboard);
+  document.getElementById("invoiceMonthFilter").addEventListener("change", renderInvoices);
+  document.getElementById("invoiceCardFilter").addEventListener("change", renderInvoices);
   document.getElementById("transactionSource").addEventListener("change", updateInstallmentControls);
   document.getElementById("transactionType").addEventListener("change", updateInstallmentControls);
   document.getElementById("transactionAmount").addEventListener("input", updateInstallmentControls);
@@ -830,10 +896,13 @@ function syncLoginState() {
   const session = localStorage.getItem(SESSION_KEY);
   document.body.classList.toggle("is-locked", !session);
   document.getElementById("loginScreen").setAttribute("aria-hidden", session ? "true" : "false");
+  if (!session) setSyncStatus("local");
 }
 
 function setDefaultDate() {
   document.getElementById("transactionDate").value = new Date().toISOString().slice(0, 10);
+  const recurringStart = document.getElementById("recurringStartDate");
+  if (recurringStart) recurringStart.value = new Date().toISOString().slice(0, 10);
 }
 
 function getValue(id) {
@@ -859,12 +928,16 @@ function scheduleDashboardRender() {
 }
 
 function render() {
+  ensureRecurringTransactions();
   renderSourceOptions();
   renderImportSourceOptions();
   renderMonthFilter();
+  renderInvoiceFilters();
   renderDashboardCardFilter();
   renderDashboard();
   renderTransactions();
+  renderRecurringList();
+  renderInvoices();
   renderAccountsAndCards();
   renderImportPreview();
   loadInvestmentProfile();
@@ -885,10 +958,17 @@ function renderDashboardCardFilter() {
 function renderSourceOptions() {
   const source = document.getElementById("transactionSource");
   const submit = document.querySelector("#transactionForm .primary-button");
+  const recurringSource = document.getElementById("recurringSource");
+  const recurringSubmit = document.querySelector("#recurringForm .primary-button");
   const options = sourceOptions();
   source.innerHTML = options.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
   source.disabled = options.length === 0;
   submit.disabled = options.length === 0;
+  if (recurringSource && recurringSubmit) {
+    recurringSource.innerHTML = options.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
+    recurringSource.disabled = options.length === 0;
+    recurringSubmit.disabled = options.length === 0;
+  }
   updateInstallmentControls();
 }
 
@@ -912,12 +992,34 @@ function sourceOptions() {
 
 function renderMonthFilter() {
   const select = document.getElementById("monthFilter");
-  const months = [...new Set(state.transactions.map((transaction) => transaction.date.slice(0, 7)))].sort().reverse();
+  const months = transactionMonths();
   const current = select.value || months[0] || new Date().toISOString().slice(0, 7);
   select.innerHTML = months.length
     ? months.map((month) => `<option value="${month}">${formatMonth(month)}</option>`).join("")
     : `<option value="${current}">${formatMonth(current)}</option>`;
   select.value = months.includes(current) ? current : months[0] || current;
+}
+
+function renderInvoiceFilters() {
+  const monthSelect = document.getElementById("invoiceMonthFilter");
+  const cardSelect = document.getElementById("invoiceCardFilter");
+  if (!monthSelect || !cardSelect) return;
+  const months = transactionMonths();
+  const currentMonth = monthSelect.value || document.getElementById("monthFilter")?.value || months[0] || new Date().toISOString().slice(0, 7);
+  monthSelect.innerHTML = months.length
+    ? months.map((month) => `<option value="${month}">${formatMonth(month)}</option>`).join("")
+    : `<option value="${currentMonth}">${formatMonth(currentMonth)}</option>`;
+  monthSelect.value = months.includes(currentMonth) ? currentMonth : months[0] || currentMonth;
+
+  const currentCard = cardSelect.value || state.cards[0]?.id || "";
+  cardSelect.innerHTML = state.cards.length
+    ? state.cards.map((card) => `<option value="${card.id}">${escapeHtml(card.name)}</option>`).join("")
+    : '<option value="">Nenhum cartão</option>';
+  cardSelect.value = state.cards.some((card) => card.id === currentCard) ? currentCard : state.cards[0]?.id || "";
+}
+
+function transactionMonths() {
+  return [...new Set(state.transactions.map((transaction) => transaction.date.slice(0, 7)))].sort().reverse();
 }
 
 function renderDashboard() {
@@ -1007,6 +1109,92 @@ function syncTransactionsTableScroll() {
   topScroll.classList.toggle("is-needed", table.scrollWidth > tableWrap.clientWidth + 2);
 }
 
+function renderRecurringList() {
+  renderCollection("recurringList", state.recurringTransactions || [], (recurring) => {
+    const sourceLabel = recurring.sourceType === "card" ? `Cartão: ${cardName(recurring.sourceId)}` : `Conta: ${accountName(recurring.sourceId)}`;
+    return `
+      <div class="list-item">
+        <div class="list-row">
+          <strong>${escapeHtml(recurring.description)}</strong>
+          <span class="${recurring.type === "income" ? "amount-income" : "amount-expense"}">${money.format(recurring.amount)}</span>
+        </div>
+        <div class="list-row subtle">
+          <span>${escapeHtml(recurring.category)} • ${escapeHtml(sourceLabel)}</span>
+          <span>${recurring.months} meses</span>
+        </div>
+        <div class="list-row subtle">
+          <span>Desde ${formatDate(recurring.startDate)}</span>
+          <button class="delete-button" data-delete-recurring="${recurring.id}" title="Excluir recorrência"><span data-icon="trash"></span></button>
+        </div>
+      </div>
+    `;
+  });
+  document.querySelectorAll("[data-delete-recurring]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const recurring = state.recurringTransactions.find((item) => item.id === button.dataset.deleteRecurring);
+      if (!recurring) return;
+      if (!confirm("Excluir esta recorrência e os lançamentos futuros gerados por ela?")) return;
+      const today = new Date().toISOString().slice(0, 10);
+      state.recurringTransactions = state.recurringTransactions.filter((item) => item.id !== recurring.id);
+      state.transactions = state.transactions.filter((transaction) => transaction.recurringId !== recurring.id || transaction.date < today);
+      persistAndRender();
+    });
+  });
+}
+
+function renderInvoices() {
+  const month = document.getElementById("invoiceMonthFilter")?.value || new Date().toISOString().slice(0, 7);
+  const cardId = document.getElementById("invoiceCardFilter")?.value || state.cards[0]?.id || "";
+  const card = state.cards.find((item) => item.id === cardId);
+  const transactions = state.transactions
+    .filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId && transaction.date.startsWith(month))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const expenses = sum(transactions.filter((transaction) => transaction.type === "expense"));
+  const credits = sum(transactions.filter((transaction) => transaction.type === "income"));
+  const total = Math.max(0, expenses - credits);
+
+  setText("invoiceTotal", money.format(total));
+  setText("invoiceExpenses", money.format(expenses));
+  setText("invoiceCredits", money.format(credits));
+  setText("invoiceDueDate", card ? invoiceDueDate(month, card.closeDay) : "--");
+
+  const table = document.getElementById("invoiceTransactionsTable");
+  if (table) {
+    table.innerHTML = transactions.map((transaction) => {
+      const sign = transaction.type === "income" ? "+" : "-";
+      const amountClass = transaction.type === "income" ? "amount-income" : "amount-expense";
+      const installmentLabel = transaction.installmentCount > 1 ? ` <span class="installment-badge">${transaction.installmentIndex}/${transaction.installmentCount}</span>` : "";
+      return `
+        <tr>
+          <td>${formatDate(transaction.date)}</td>
+          <td>${escapeHtml(transaction.description)}${installmentLabel}</td>
+          <td>${escapeHtml(transaction.category)}</td>
+          <td>${escapeHtml(cardName(transaction.sourceId))}</td>
+          <td class="${amountClass}">${sign} ${money.format(transaction.amount)}</td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="5">${emptyStateMarkup()}</td></tr>`;
+    hydrateIcons(table);
+  }
+
+  renderCollection("invoiceCardsSummary", state.cards.map((item) => {
+    const cardTransactions = state.transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === item.id && transaction.date.startsWith(month));
+    const cardTotal = calculateCardOpenTotal(cardTransactions);
+    return { ...item, total: cardTotal, selected: item.id === cardId };
+  }), (item) => `
+    <div class="list-item ${item.selected ? "selected-list-item" : ""}">
+      <div class="list-row">
+        <strong>${escapeHtml(item.name)}</strong>
+        <span>${money.format(item.total)}</span>
+      </div>
+      <div class="list-row subtle">
+        <span>Fechamento dia ${item.closeDay}</span>
+        <span>${invoiceDueDate(month, item.closeDay)}</span>
+      </div>
+    </div>
+  `);
+}
+
 function renderAccountsAndCards() {
   renderCollection("accountsList", calculateAccounts(), (account) => `
     <div class="list-item">
@@ -1083,6 +1271,7 @@ function bindDeleteButtons() {
     button.addEventListener("click", () => {
       state.accounts = state.accounts.filter((account) => account.id !== button.dataset.deleteAccount);
       state.transactions = state.transactions.filter((transaction) => transaction.sourceId !== button.dataset.deleteAccount);
+      state.recurringTransactions = state.recurringTransactions.filter((recurring) => recurring.sourceId !== button.dataset.deleteAccount);
       persistAndRender();
     });
   });
@@ -1091,6 +1280,7 @@ function bindDeleteButtons() {
     button.addEventListener("click", () => {
       state.cards = state.cards.filter((card) => card.id !== button.dataset.deleteCard);
       state.transactions = state.transactions.filter((transaction) => transaction.sourceId !== button.dataset.deleteCard);
+      state.recurringTransactions = state.recurringTransactions.filter((recurring) => recurring.sourceId !== button.dataset.deleteCard);
       persistAndRender();
     });
   });
@@ -1778,6 +1968,41 @@ function calculateCardOpenTotal(transactions) {
   return Math.max(0, cardExpenses - cardCredits);
 }
 
+function ensureRecurringTransactions() {
+  let changed = false;
+  (state.recurringTransactions || []).forEach((recurring) => {
+    changed = generateRecurringTransactions(recurring) || changed;
+  });
+  if (changed) {
+    saveState();
+  }
+}
+
+function generateRecurringTransactions(recurring) {
+  const months = Math.min(60, Math.max(1, Number(recurring.months || 12)));
+  let changed = false;
+  for (let index = 0; index < months; index += 1) {
+    const date = addMonths(recurring.startDate, index);
+    const recurringKey = `${recurring.id}:${date.slice(0, 7)}`;
+    const exists = state.transactions.some((transaction) => transaction.recurringKey === recurringKey);
+    if (exists) continue;
+    state.transactions.push({
+      id: makeId(),
+      description: recurring.description,
+      type: recurring.type,
+      amount: Number(recurring.amount || 0),
+      date,
+      category: recurring.category,
+      sourceType: recurring.sourceType,
+      sourceId: recurring.sourceId,
+      recurringId: recurring.id,
+      recurringKey,
+    });
+    changed = true;
+  }
+  return changed;
+}
+
 function buildTransactionEntries({ sourceType, sourceId, type, amount, installments }) {
   const description = getValue("transactionDescription");
   const date = getValue("transactionDate");
@@ -1858,6 +2083,14 @@ function sourceName(transaction) {
   return `${prefix}: ${collection.find((item) => item.id === transaction.sourceId)?.name || "Removido"}`;
 }
 
+function accountName(accountId) {
+  return state.accounts.find((account) => account.id === accountId)?.name || "Removida";
+}
+
+function cardName(cardId) {
+  return state.cards.find((card) => card.id === cardId)?.name || "Removido";
+}
+
 function sum(items) {
   return items.reduce((total, item) => total + Number(item.amount || 0), 0);
 }
@@ -1872,6 +2105,12 @@ function formatDate(date) {
 
 function formatMonth(month) {
   return new Date(`${month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+function invoiceDueDate(month, closeDay) {
+  if (!month || !closeDay) return "--";
+  const closeDate = `${month}-${String(closeDay).padStart(2, "0")}`;
+  return formatDate(addMonths(closeDate, 1));
 }
 
 function escapeHtml(value) {
