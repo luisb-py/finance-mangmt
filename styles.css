@@ -1256,6 +1256,162 @@ label {
   padding-top: 16px;
 }
 
+.planner-hero {
+  display: flex;
+  min-height: 174px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+  background:
+    radial-gradient(circle at 86% 20%, color-mix(in srgb, var(--green) 20%, transparent), transparent 18rem),
+    linear-gradient(135deg, color-mix(in srgb, var(--green) 12%, transparent), transparent 62%),
+    var(--surface);
+}
+
+.planner-hero h2 {
+  margin-top: 7px;
+  font-size: clamp(1.65rem, 3.2vw, 2.4rem);
+}
+
+.planner-hero p:not(.eyebrow) {
+  max-width: 680px;
+  margin-top: 9px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.planner-score {
+  display: grid;
+  width: 136px;
+  height: 136px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--green) 44%, transparent);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.16), transparent 40%),
+    linear-gradient(135deg, color-mix(in srgb, var(--green) 82%, #062c27), #062c27);
+  color: #fff;
+  box-shadow: 0 24px 60px rgba(6, 95, 70, 0.26);
+  text-align: center;
+}
+
+.planner-score span,
+.planner-metric span {
+  color: color-mix(in srgb, #fff 72%, var(--muted));
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.planner-score strong {
+  display: block;
+  max-width: 92px;
+  font-size: 1.08rem;
+  line-height: 1.15;
+}
+
+.planner-score[data-status="danger"] {
+  border-color: color-mix(in srgb, var(--red) 52%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--red) 70%, #32111d), #32111d);
+}
+
+.planner-score[data-status="warn"] {
+  border-color: color-mix(in srgb, var(--gold) 52%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 72%, #3b2a08), #3b2a08);
+}
+
+.planner-grid {
+  display: grid;
+  grid-template-columns: minmax(330px, 0.95fr) minmax(0, 1.25fr);
+  gap: 18px;
+}
+
+.planner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.planner-actions .primary-button {
+  flex: 1;
+}
+
+.planner-result-panel {
+  align-self: start;
+}
+
+.planner-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.planner-metric {
+  min-height: 92px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 14px;
+}
+
+.planner-metric span {
+  display: block;
+  color: var(--muted);
+}
+
+.planner-metric strong {
+  display: block;
+  margin-top: 12px;
+  color: var(--ink);
+  font-size: 1.08rem;
+}
+
+.planner-metric[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--red) 36%, var(--line));
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
+.planner-metric[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--gold) 36%, var(--line));
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+}
+
+.planner-metric[data-tone="ok"] {
+  border-color: color-mix(in srgb, var(--green) 30%, var(--line));
+}
+
+.planner-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.planner-suggestions button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--control-bg);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0 12px;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.planner-suggestions button:hover {
+  border-color: color-mix(in srgb, var(--green) 44%, var(--line));
+  background: color-mix(in srgb, var(--green) 10%, var(--control-bg));
+  transform: translateY(-1px);
+}
+
+.planner-answer {
+  min-height: 290px;
+  white-space: pre-line;
+}
+
 .ai-widget {
   position: fixed;
   right: 22px;
@@ -2002,7 +2158,8 @@ button:hover [data-icon],
   .metric-grid,
   .dashboard-grid,
   .work-grid,
-  .work-grid.two {
+  .work-grid.two,
+  .planner-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -2038,7 +2195,7 @@ button:hover [data-icon],
 
   .nav-tabs {
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: 4px;
   }
 
@@ -2091,6 +2248,7 @@ button:hover [data-icon],
   .dashboard-toolbar,
   .panel-header,
   .profile-hero,
+  .planner-hero,
   .field-row {
     align-items: stretch;
     flex-direction: column;
@@ -2103,6 +2261,16 @@ button:hover [data-icon],
   }
 
   .profile-details {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-score {
+    width: 94px;
+    height: 94px;
+  }
+
+  .planner-grid,
+  .planner-metrics {
     grid-template-columns: 1fr;
   }
 

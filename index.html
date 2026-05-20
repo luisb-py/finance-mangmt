@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=19" />
+    <link rel="stylesheet" href="styles.css?v=20" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -86,6 +86,10 @@
         <button class="nav-tab" data-tab="investments" title="Investimentos">
           <span data-icon="trend"></span>
           Investir <span class="premium-badge">Premium</span>
+        </button>
+        <button class="nav-tab" data-tab="planner" title="Planejador IA">
+          <span data-icon="brain"></span>
+          Planejar <span class="premium-badge">Premium</span>
         </button>
         <button class="nav-tab" data-tab="profile" title="Perfil">
           <span data-icon="user"></span>
@@ -739,48 +743,101 @@
               <div class="coach-answer" id="investmentAnswer"></div>
             </div>
 
-            <div class="decision-planner">
-              <div class="panel-header compact-header">
-                <div>
-                  <p class="eyebrow">Decisão</p>
-                  <h2>Planejador com IA <span class="premium-badge">Premium</span></h2>
-                </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="planner">
+        <div class="planner-hero panel">
+          <div>
+            <p class="eyebrow">Planejador IA <span class="premium-badge">Premium</span></p>
+            <h2>Decisões financeiras com realidade</h2>
+            <p>Faça perguntas sobre compras, parcelas, metas, mudanças de rotina e planos. A análise usa seus números reais, aponta riscos e dá uma recomendação direta.</p>
+          </div>
+          <div class="planner-score" id="plannerScore">
+            <span>Status</span>
+            <strong>Calculando</strong>
+          </div>
+        </div>
+
+        <div class="planner-grid">
+          <section class="panel form-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Nova decisão</p>
+                <h2>O que você quer avaliar?</h2>
               </div>
-              <div class="field-row">
-                <label>
-                  Tipo
-                  <select id="decisionType">
-                    <option value="compra">Compra importante</option>
-                    <option value="parcelamento">Parcelamento</option>
-                    <option value="carro">Comprar carro</option>
-                    <option value="viagem">Viagem</option>
-                    <option value="investimento">Começar a investir</option>
-                  </select>
-                </label>
-                <label>
-                  Valor estimado
-                  <input id="decisionAmount" type="number" min="0" step="50" placeholder="0,00" />
-                </label>
-              </div>
-              <div class="field-row">
-                <label>
-                  Prazo
-                  <input id="decisionDeadline" type="text" placeholder="Ex.: 6 meses" />
-                </label>
-                <label>
-                  Parcelas
-                  <input id="decisionInstallments" type="number" min="1" max="84" step="1" placeholder="1" />
-                </label>
-              </div>
+            </div>
+            <label>
+              Pergunta principal
+              <textarea id="plannerQuestion" rows="4" placeholder="Ex.: Posso comprar um PC gamer com parcelas de R$ 500 considerando meu salário líquido de R$ 1.900?"></textarea>
+            </label>
+            <div class="field-row">
               <label>
-                Contexto
-                <textarea id="decisionNotes" rows="3" placeholder="Ex.: Quero comprar sem comprometer reserva ou fatura."></textarea>
+                Tipo
+                <select id="decisionType">
+                  <option value="compra">Compra importante</option>
+                  <option value="parcelamento">Parcelamento</option>
+                  <option value="viagem">Viagem ou lazer</option>
+                  <option value="mudanca">Mudança de rotina</option>
+                  <option value="investimento">Investimento ou reserva</option>
+                  <option value="outro">Outro plano</option>
+                </select>
               </label>
+              <label>
+                Valor total estimado
+                <input id="decisionAmount" type="number" min="0" step="50" placeholder="0,00" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label>
+                Valor da parcela
+                <input id="decisionInstallmentValue" type="number" min="0" step="10" placeholder="0,00" />
+              </label>
+              <label>
+                Parcelas
+                <input id="decisionInstallments" type="number" min="1" max="84" step="1" placeholder="1" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label>
+                Renda líquida para considerar
+                <input id="decisionIncome" type="number" min="0" step="50" placeholder="Usar entradas do app" />
+              </label>
+              <label>
+                Prazo ou urgência
+                <input id="decisionDeadline" type="text" placeholder="Ex.: este mês, 6 meses, até dezembro" />
+              </label>
+            </div>
+            <label>
+              Contexto adicional
+              <textarea id="decisionNotes" rows="3" placeholder="Ex.: Tenho outras parcelas, quero manter reserva, posso esperar promoção, preciso para trabalho."></textarea>
+            </label>
+            <div class="planner-actions">
               <button class="primary-button" id="generateDecisionPlan" type="button">
                 <span data-icon="brain"></span>
-                Planejar decisão <span class="premium-badge">Premium</span>
+                Analisar decisão <span class="premium-badge">Premium</span>
               </button>
-              <div class="coach-answer" id="decisionAnswer"></div>
+              <button class="secondary-button" id="clearPlanner" type="button">Limpar</button>
+            </div>
+            <p class="import-status" id="plannerStatus">A IA vai cruzar sua pergunta com renda, gastos, fatura, reserva e categorias.</p>
+          </section>
+
+          <section class="panel planner-result-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Diagnóstico</p>
+                <h2>Resposta do planejador</h2>
+              </div>
+            </div>
+            <div class="planner-metrics" id="plannerMetrics"></div>
+            <div class="planner-suggestions">
+              <button type="button" data-planner-prompt="Posso assumir uma parcela nova sem apertar minha fatura?">Parcela nova</button>
+              <button type="button" data-planner-prompt="Vale a pena comprar agora ou esperar juntar mais entrada?">Comprar agora?</button>
+              <button type="button" data-planner-prompt="Qual meta financeira deveria priorizar este mês?">Prioridade do mês</button>
+            </div>
+            <div class="coach-answer planner-answer" id="decisionAnswer">
+              Preencha a decisão e toque em analisar para receber um parecer realista.
             </div>
           </section>
         </div>
@@ -1004,6 +1061,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=31"></script>
   </body>
 </html>

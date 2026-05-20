@@ -10,6 +10,7 @@ const PLAN_LIMITS = {
     transactionsPerMonth: 100,
     invoiceImport: false,
     investments: false,
+    decisionPlanning: false,
     export: false,
   },
   premium: {
@@ -18,6 +19,7 @@ const PLAN_LIMITS = {
     transactionsPerMonth: Infinity,
     invoiceImport: true,
     investments: true,
+    decisionPlanning: true,
     export: true,
   },
 };
@@ -35,6 +37,10 @@ const PREMIUM_FEATURES = {
   investments: {
     title: "Investimentos com IA",
     text: "A aba de investimentos, o planejador de decisão e a assessoria com IA fazem parte do Premium.",
+  },
+  decisionPlanning: {
+    title: "Planejador financeiro IA",
+    text: "O planejador de decisões com IA especialista faz parte do Premium.",
   },
 };
 
@@ -771,7 +777,17 @@ function bindForms() {
   document.getElementById("saveInvestmentProfile").addEventListener("click", saveInvestmentProfile);
   document.getElementById("generateInvestmentPlan").addEventListener("click", generateInvestmentPlan);
   document.getElementById("askInvestmentAi").addEventListener("click", askInvestmentQuestion);
-  document.getElementById("generateDecisionPlan").addEventListener("click", generateDecisionPlan);
+  document.getElementById("generateDecisionPlan")?.addEventListener("click", generateDecisionPlan);
+  document.getElementById("clearPlanner")?.addEventListener("click", clearPlannerForm);
+  ["plannerQuestion", "decisionAmount", "decisionInstallmentValue", "decisionInstallments", "decisionIncome", "decisionDeadline", "decisionNotes"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", renderPlannerMetrics);
+  });
+  document.querySelectorAll("[data-planner-prompt]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById("plannerQuestion").value = button.dataset.plannerPrompt;
+      generateDecisionPlan();
+    });
+  });
 }
 
 function bindCalculator() {
@@ -1114,7 +1130,7 @@ async function askRealAi(question, mode = "finance") {
     ? null
     : mode === "investment"
       ? investmentPreviousResponseId
-      : mode === "decision"
+      : mode === "decision" || mode === "planner"
         ? decisionPreviousResponseId
         : aiPreviousResponseId;
   const response = await fetch("/api/ai", {
@@ -1138,7 +1154,7 @@ async function askRealAi(question, mode = "finance") {
   }
   if (mode === "investment") {
     investmentPreviousResponseId = data.responseId || investmentPreviousResponseId;
-  } else if (mode === "decision") {
+  } else if (mode === "decision" || mode === "planner") {
     decisionPreviousResponseId = data.responseId || decisionPreviousResponseId;
   } else {
     aiPreviousResponseId = data.responseId || aiPreviousResponseId;
@@ -1147,7 +1163,7 @@ async function askRealAi(question, mode = "finance") {
 }
 
 function shouldStartFreshAiThread(question, mode) {
-  if (mode === "decision") return true;
+  if (mode === "decision" || mode === "planner") return true;
   const lowerQuestion = question.toLowerCase();
   return /comprar|financiar|parcelar|parcela|sal[aá]rio|renda|pc gamer|notebook|celular|viagem/.test(lowerQuestion);
 }
@@ -1174,6 +1190,7 @@ function buildAiContext() {
     planLimits: currentPlanLimits(),
     investmentProfile: getInvestmentProfile(),
     decisionContext: document.getElementById("decisionType") ? getDecisionContext() : null,
+    plannerSnapshot: plannerSnapshot(),
     diagnostics: buildFinancialDiagnostics(stats),
     categoryBreakdown: categoryBreakdown(),
     monthlyTrend: monthlyTrend(),
@@ -1260,7 +1277,7 @@ function localAiFallback(question) {
     return `Sua fatura em aberto está em ${money.format(stats.cardOpenTotal)}. Isso representa ${stats.income ? Math.round((stats.cardOpenTotal / stats.income) * 100) : 0}% das entradas do mês. Comece revisando gastos no cartão nas maiores categorias: ${formatCategoryList(topCategories)}.`;
   }
 
-  if (/carro|ve[ií]culo|comprar|financiar|entrada|parcela|parcelar|pc gamer|notebook|celular|viagem/.test(lowerQuestion)) {
+  if (/comprar|financiar|entrada|parcela|parcelar|pc gamer|notebook|celular|viagem/.test(lowerQuestion)) {
     return localPurchaseFallback(question, stats, topCategories);
   }
 
@@ -1274,7 +1291,7 @@ function localAiFallback(question) {
   }
 
   if (stats.topCategory) {
-    return `O maior foco agora é ${stats.topCategory.name}, com ${money.format(stats.topCategory.value)} em saídas. Seu resultado do mês está em ${money.format(stats.net)} e a fatura aberta está em ${money.format(stats.cardOpenTotal)}. Pergunte sobre uma meta específica, como carro, reserva, quitar cartão ou reduzir gastos.`;
+    return `O maior foco agora é ${stats.topCategory.name}, com ${money.format(stats.topCategory.value)} em saídas. Seu resultado do mês está em ${money.format(stats.net)} e a fatura aberta está em ${money.format(stats.cardOpenTotal)}. Para uma decisão específica, abra o Planejador IA e informe valor, parcela e renda considerada.`;
   }
 
   return "Cadastre mais entradas, saídas e faturas para eu conseguir analisar com mais precisão. Com poucos dados, eu só consigo orientar de forma geral.";
@@ -1329,6 +1346,13 @@ function parseIncomeFromQuestion(question) {
     /renda\s+(?:l[ií]quida\s+)?(?:de|é|e)?\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
     /ganho\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
     /recebo\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
+  ]);
+}
+
+function parseTotalFromQuestion(question) {
+  return parseFirstMoneyMatch(question, [
+    /valor\s+(?:total|estimado)?\s*(?:de|é|e)?\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
+    /(?:total|custa|custando|por)\s*(?:r\$\s*)?([\d.]+(?:,\d{1,2})?)/i,
   ]);
 }
 
@@ -1459,36 +1483,41 @@ async function askInvestmentQuestion() {
 }
 
 async function generateDecisionPlan() {
-  if (!requirePremiumFeature("investments")) return;
+  if (!requirePremiumFeature("decisionPlanning")) return;
   const answer = document.getElementById("decisionAnswer");
   const decision = getDecisionContext();
-  if (!decision.amount && !decision.notes) {
-    answer.textContent = "Informe pelo menos um valor ou contexto para a IA avaliar a decisão.";
+  const question = decision.question || decision.notes;
+  if (!question && !decision.amount && !decision.installmentValue) {
+    answer.textContent = "Escreva a decisão que você quer avaliar ou informe valores para eu analisar.";
     return;
   }
 
-  answer.textContent = "Analisando sua decisão com a IA...";
+  setPlannerStatus("Analisando com a IA especialista...");
+  answer.textContent = "Calculando impacto na sua renda, fatura, reserva e fluxo de caixa...";
   try {
-    const prompt = [
-      `Tipo de decisão: ${decision.type}`,
-      `Valor estimado: ${money.format(decision.amount || 0)}`,
-      `Prazo: ${decision.deadline || "não informado"}`,
-      `Parcelas: ${decision.installments || "não informado"}`,
-      `Contexto: ${decision.notes || "não informado"}`,
-      "Avalie se cabe no orçamento, riscos para reserva/fatura, limite de parcela saudável e próximos passos.",
-    ].join("\n");
-    answer.textContent = await askRealAi(prompt, "decision");
+    answer.textContent = await askRealAi(buildPlannerPrompt(decision), "planner");
+    setPlannerStatus("Análise gerada pela IA conectada.");
   } catch {
     answer.textContent = localDecisionFallback(decision);
+    setPlannerStatus("Servidor de IA indisponível. Mostrei uma análise local avançada.");
   }
 }
 
 function getDecisionContext() {
+  const amount = Number(getValue("decisionAmount") || 0);
+  const installmentValue = Number(getValue("decisionInstallmentValue") || 0);
+  const installments = Number(getValue("decisionInstallments") || 0);
+  const question = getValue("plannerQuestion");
+  const inferredInstallment = installmentValue || parseInstallmentFromQuestion(question);
+  const inferredIncome = Number(getValue("decisionIncome") || 0) || parseIncomeFromQuestion(question);
   return {
+    question,
     type: getValue("decisionType"),
-    amount: Number(getValue("decisionAmount") || 0),
+    amount: amount || parseTotalFromQuestion(question),
+    installmentValue: inferredInstallment,
     deadline: getValue("decisionDeadline"),
-    installments: Number(getValue("decisionInstallments") || 0),
+    installments,
+    income: inferredIncome,
     notes: getValue("decisionNotes"),
   };
 }
@@ -1496,20 +1525,139 @@ function getDecisionContext() {
 function localDecisionFallback(decision) {
   const stats = financialStats();
   const diagnostics = buildFinancialDiagnostics(stats);
-  const installment = decision.installments ? decision.amount / decision.installments : decision.amount;
-  const pressure = stats.income ? (installment / stats.income) * 100 : 0;
+  const topCategories = categoryBreakdown().slice(0, 3);
+  const baseIncome = decision.income || stats.income;
+  const installment = decision.installmentValue || (decision.installments && decision.amount ? decision.amount / decision.installments : decision.amount);
+  const totalPlanned = decision.amount || (installment && decision.installments ? installment * decision.installments : 0);
+  const pressure = baseIncome ? (installment / baseIncome) * 100 : 0;
+  const safeInstallment = Math.max(0, baseIncome * 0.12);
+  const availableCashflow = Math.max(0, stats.net);
   const risk = [
-    stats.net <= 0 ? "seu mês está sem sobra positiva" : null,
-    diagnostics.reserveMonths < 3 ? "sua reserva ainda está abaixo de 3 meses de gastos" : null,
-    diagnostics.cardPressure > 35 ? "a fatura atual já pressiona sua renda" : null,
-    pressure > 12 ? "a parcela ficaria acima de 12% das entradas do mês" : null,
+    stats.net <= 0 ? `o resultado do mês está negativo em ${money.format(Math.abs(stats.net))}` : null,
+    diagnostics.reserveMonths < 3 ? `a reserva cobre só ${diagnostics.reserveMonths} mês(es) de gastos` : null,
+    diagnostics.cardPressure > 35 ? `a fatura aberta já usa ${diagnostics.cardPressure}% das entradas` : null,
+    installment && pressure > 20 ? `a parcela ficaria em ${Math.round(pressure)}% da renda considerada` : null,
+    installment && installment > availableCashflow && stats.net > 0 ? `a parcela passaria da folga atual de ${money.format(availableCashflow)}` : null,
   ].filter(Boolean);
 
+  const subject = purchaseSubject(`${decision.question} ${decision.notes}`) || "plano";
+  const recommendation = risk.length >= 2
+    ? "adiar"
+    : risk.length === 1
+      ? "ajustar"
+      : "avançar com limite";
+
   if (risk.length) {
-    return `Eu teria cautela com essa decisão. A parcela estimada seria ${money.format(installment)}, cerca de ${Math.round(pressure)}% das entradas do mês. Pontos de atenção: ${risk.join(", ")}. Próximo passo: simule uma parcela menor, aumente a entrada ou adie até a reserva/fatura ficarem mais confortáveis.`;
+    return [
+      `Parecer realista: eu recomendaria ${recommendation} antes de assumir esse ${subject}.`,
+      `Impacto: ${installment ? `parcela de ${money.format(installment)} (${Math.round(pressure)}% da renda considerada)` : "parcela não informada"}${totalPlanned ? `, valor total estimado de ${money.format(totalPlanned)}` : ""}.`,
+      `Riscos: ${risk.join("; ")}.`,
+      topCategories.length ? `Onde ajustar primeiro: ${formatCategoryList(topCategories)}.` : "Ainda faltam categorias suficientes para apontar cortes precisos.",
+      `Condição para ficar saudável: parcela perto de ${money.format(safeInstallment)} ou menor, fatura sob controle e reserva mínima de 3 meses antes de fechar.`,
+    ].join("\n\n");
   }
 
-  return `A decisão parece caber melhor no seu momento atual. Valor estimado: ${money.format(decision.amount)}; parcela aproximada: ${money.format(installment)}. Ainda assim, eu colocaria uma regra: só avançar se mantiver reserva, fatura sob controle e resultado mensal positivo após a compra.`;
+  return [
+    `Parecer realista: dá para avançar com controle, não no impulso.`,
+    `Impacto: ${installment ? `parcela de ${money.format(installment)} (${Math.round(pressure)}% da renda considerada)` : "parcela não informada"}${totalPlanned ? `, total de ${money.format(totalPlanned)}` : ""}.`,
+    `Regra de segurança: mantenha a parcela até ${money.format(safeInstallment)}, preserve reserva e confirme que o resultado mensal continua positivo depois da decisão.`,
+    topCategories.length ? `Se precisar abrir espaço, revise primeiro ${formatCategoryList(topCategories)}.` : "Cadastre mais gastos por categoria para a IA apontar cortes melhores.",
+  ].join("\n\n");
+}
+
+function buildPlannerPrompt(decision) {
+  const stats = financialStats();
+  const diagnostics = buildFinancialDiagnostics(stats);
+  const totalPlanned = decision.amount || (decision.installmentValue && decision.installments ? decision.installmentValue * decision.installments : 0);
+  const baseIncome = decision.income || stats.income;
+  const installment = decision.installmentValue || (decision.installments && totalPlanned ? totalPlanned / decision.installments : 0);
+  return [
+    "Você é o Planejador IA Premium. Avalie a decisão atual do usuário como um especialista financeiro realista.",
+    "Não reutilize assunto anterior. Não cite nenhum item, exemplo ou objetivo que não esteja explicitamente na decisão atual.",
+    `Pergunta do usuário: ${decision.question || "não informada"}`,
+    `Tipo: ${decision.type}`,
+    `Valor total estimado: ${totalPlanned ? money.format(totalPlanned) : "não informado"}`,
+    `Parcela informada/calculada: ${installment ? money.format(installment) : "não informada"}`,
+    `Quantidade de parcelas: ${decision.installments || "não informada"}`,
+    `Renda líquida considerada: ${baseIncome ? money.format(baseIncome) : "não informada"}`,
+    `Prazo/urgência: ${decision.deadline || "não informado"}`,
+    `Contexto adicional: ${decision.notes || "não informado"}`,
+    `Números do mês: entradas ${money.format(stats.income)}, saídas ${money.format(stats.expense)}, resultado ${money.format(stats.net)}, faturas abertas ${money.format(stats.cardOpenTotal)}.`,
+    `Diagnóstico: reserva ${diagnostics.reserveMonths} mês(es), taxa de sobra ${diagnostics.savingsRate}%, pressão do cartão ${diagnostics.cardPressure}%.`,
+    `Categorias de gasto: ${formatCategoryList(categoryBreakdown().slice(0, 5))}.`,
+    "Responda em português com: Parecer direto; impacto mensal; riscos reais; condição mínima para aprovar; alternativa mais segura; próximos 3 passos.",
+  ].join("\n");
+}
+
+function plannerSnapshot() {
+  const decision = document.getElementById("decisionType") ? getDecisionContext() : null;
+  if (!decision) return null;
+  const stats = financialStats();
+  const income = decision.income || stats.income;
+  const installment = decision.installmentValue || (decision.installments && decision.amount ? decision.amount / decision.installments : 0);
+  return {
+    decision,
+    installmentPressure: income && installment ? Number(((installment / income) * 100).toFixed(1)) : 0,
+    safeInstallment: income ? Number((income * 0.12).toFixed(2)) : 0,
+  };
+}
+
+function renderPlannerMetrics() {
+  const container = document.getElementById("plannerMetrics");
+  const score = document.getElementById("plannerScore");
+  if (!container) return;
+  const stats = financialStats();
+  const diagnostics = buildFinancialDiagnostics(stats);
+  const decision = getDecisionContext();
+  const income = decision.income || stats.income;
+  const installment = decision.installmentValue || (decision.installments && decision.amount ? decision.amount / decision.installments : 0);
+  const pressure = income && installment ? (installment / income) * 100 : 0;
+  const warnings = [
+    stats.net < 0,
+    diagnostics.reserveMonths < 3,
+    diagnostics.cardPressure > 35,
+    pressure > 20,
+  ].filter(Boolean).length;
+  const status = warnings >= 2 ? "Alto risco" : warnings === 1 ? "Atenção" : "Saudável";
+
+  if (score) {
+    score.querySelector("strong").textContent = status;
+    score.dataset.status = warnings >= 2 ? "danger" : warnings === 1 ? "warn" : "ok";
+  }
+
+  const metrics = [
+    { label: "Resultado do mês", value: money.format(stats.net), tone: stats.net < 0 ? "danger" : "ok" },
+    { label: "Pressão da fatura", value: `${diagnostics.cardPressure}%`, tone: diagnostics.cardPressure > 35 ? "danger" : "ok" },
+    { label: "Reserva estimada", value: `${diagnostics.reserveMonths} mês(es)`, tone: diagnostics.reserveMonths < 3 ? "warn" : "ok" },
+    { label: "Parcela/Renda", value: installment ? `${Math.round(pressure)}%` : "Informe", tone: pressure > 20 ? "danger" : pressure > 12 ? "warn" : "ok" },
+  ];
+
+  container.innerHTML = metrics
+    .map(
+      (item) => `
+        <article class="planner-metric" data-tone="${item.tone}">
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${escapeHtml(item.value)}</strong>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function setPlannerStatus(message) {
+  const status = document.getElementById("plannerStatus");
+  if (status) status.textContent = message;
+}
+
+function clearPlannerForm() {
+  ["plannerQuestion", "decisionAmount", "decisionInstallmentValue", "decisionInstallments", "decisionIncome", "decisionDeadline", "decisionNotes"].forEach((id) => {
+    const field = document.getElementById(id);
+    if (field) field.value = "";
+  });
+  const answer = document.getElementById("decisionAnswer");
+  if (answer) answer.textContent = "Preencha a decisão e toque em analisar para receber um parecer realista.";
+  setPlannerStatus("A IA vai cruzar sua pergunta com renda, gastos, fatura, reserva e categorias.");
+  renderPlannerMetrics();
 }
 
 function localInvestmentFallback() {
@@ -1637,6 +1785,7 @@ function render() {
   renderImportPreview();
   loadInvestmentProfile();
   renderInvestmentSummary();
+  renderPlannerMetrics();
 }
 
 function renderProfile() {

@@ -110,7 +110,7 @@ async function handleAi(request, response) {
 
   const payload = await readJson(request);
   const question = String(payload.question || "").trim();
-  const allowedModes = new Set(["finance", "investment", "decision"]);
+  const allowedModes = new Set(["finance", "investment", "decision", "planner"]);
   const mode = allowedModes.has(payload.mode) ? payload.mode : "finance";
   const previousResponseId = typeof payload.previousResponseId === "string" ? payload.previousResponseId : null;
   if (!question) {
@@ -135,7 +135,7 @@ async function handleAi(request, response) {
     max_output_tokens: 650,
   };
 
-  if (previousResponseId) {
+  if (previousResponseId && mode !== "planner" && mode !== "decision") {
     requestBody.previous_response_id = previousResponseId;
   }
 
@@ -680,6 +680,10 @@ function buildInstructions(mode) {
 
   if (mode === "decision") {
     return `${base} Você está no planejador de decisão. Avalie somente a decisão atual da pessoa, sem reaproveitar exemplos antigos. Ajude a decidir se deve comprar, parcelar, viajar, trocar de equipamento, começar um investimento ou adiar. Use o fluxo: 1) resposta direta: avançar, ajustar ou adiar; 2) impacto mensal em reais e percentuais quando houver dados; 3) riscos para fatura, reserva e fluxo de caixa; 4) uma alternativa mais segura; 5) próximos passos objetivos. Não incentive endividamento arriscado. Se faltar dado crítico, faça uma pergunta curta no fim.`;
+  }
+
+  if (mode === "planner") {
+    return `${base} Você é uma IA Premium de planejamento financeiro pessoal. Seja realista, direta e específica. Avalie apenas a decisão atual; nunca reutilize assunto, objeto ou exemplo de mensagens antigas. Não mencione nenhum item, exemplo ou objetivo que não esteja explicitamente na decisão atual. Use o contexto JSON com rigor: entradas, saídas, resultado mensal, fatura aberta, reserva estimada, pressão do cartão, categorias e lançamentos recentes. Quando houver parcela e renda, calcule percentual da renda; classifique como saudável até 12%, atenção entre 12% e 20%, arriscado acima de 20%, ajustando pelo resultado mensal e fatura. Se o mês estiver negativo, seja firme e recomende adiar ou reduzir. Dê uma resposta útil e personalizada neste formato: Parecer direto; Impacto nos números; Riscos; Condição mínima para aprovar; Alternativa mais segura; Próximos 3 passos. Evite frases genéricas e não diga só 'depende'.`;
   }
 
   return `${base} Para finanças pessoais, priorize fluxo de caixa, orçamento, categorias de gasto, fatura do cartão, reserva de emergência e hábitos simples. Não dê recomendação de investimento específica nesta área; encaminhe para a área de investimentos quando a pergunta for sobre investir.`;
