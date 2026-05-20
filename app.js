@@ -26,6 +26,17 @@ const PLAN_LABELS = {
   premium: "Premium",
 };
 
+const PREMIUM_FEATURES = {
+  invoiceImport: {
+    title: "Importação de faturas",
+    text: "A leitura e importação de faturas em PDF faz parte do Premium.",
+  },
+  investments: {
+    title: "Investimentos com IA",
+    text: "A aba de investimentos, o planejador de decisão e a assessoria com IA fazem parte do Premium.",
+  },
+};
+
 const initialState = {
   subscription: defaultSubscription(),
   accounts: [],
@@ -88,6 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindAiChat();
   bindCalculator();
   bindQuickEntry();
+  bindPremiumModal();
   bindPwaInstall();
   bindTableScroll();
   initScrollAnimations();
@@ -398,6 +410,53 @@ function renderPlanUsage() {
   }
 }
 
+function hasPremiumFeature(feature) {
+  return Boolean(currentPlanLimits()[feature]);
+}
+
+function requirePremiumFeature(feature) {
+  if (hasPremiumFeature(feature)) return true;
+  openPremiumModal(feature);
+  return false;
+}
+
+function openPremiumModal(feature) {
+  const modal = document.getElementById("premiumModal");
+  if (!modal) return;
+  const data = PREMIUM_FEATURES[feature] || {
+    title: "Função Premium",
+    text: "Essa ferramenta faz parte do plano Premium de R$ 29,90/mês.",
+  };
+  document.getElementById("premiumModalTitle").textContent = data.title;
+  document.getElementById("premiumModalText").textContent = `${data.text} Assine por R$ 29,90/mês para liberar.`;
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("has-modal-open");
+  setTimeout(() => document.getElementById("premiumSubscribeButton")?.focus(), 30);
+}
+
+function closePremiumModal() {
+  const modal = document.getElementById("premiumModal");
+  if (!modal) return;
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("has-modal-open");
+}
+
+function bindPremiumModal() {
+  document.getElementById("closePremiumModal")?.addEventListener("click", closePremiumModal);
+  document.getElementById("premiumMaybeLater")?.addEventListener("click", closePremiumModal);
+  document.querySelectorAll("[data-close-premium-modal]").forEach((item) => {
+    item.addEventListener("click", closePremiumModal);
+  });
+  document.getElementById("premiumSubscribeButton")?.addEventListener("click", () => {
+    document.getElementById("premiumModalNote").textContent = "Checkout ainda não conectado. Me chame para ativar a assinatura.";
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closePremiumModal();
+  });
+}
+
 function setSyncStatus(status, timestamp = null) {
   const container = document.getElementById("syncStatus");
   const text = document.getElementById("syncStatusText");
@@ -566,6 +625,7 @@ function bindForms() {
 
   document.getElementById("invoiceFile").addEventListener("change", handleInvoiceFiles);
   document.getElementById("parseInvoiceText").addEventListener("click", () => {
+    if (!requirePremiumFeature("invoiceImport")) return;
     const rows = parseInvoiceText(getValue("invoicePaste"));
     setImportPreview(rows, "texto colado");
   });
@@ -1017,6 +1077,7 @@ function loadInvestmentProfile() {
 }
 
 function saveInvestmentProfile() {
+  if (!requirePremiumFeature("investments")) return;
   localStorage.setItem(INVESTMENT_PROFILE_KEY, JSON.stringify(getInvestmentProfile()));
   queueRemoteSave();
   document.getElementById("investmentStatus").textContent = "Perfil salvo. A IA vai usar esses dados nas orientações.";
@@ -1077,6 +1138,7 @@ function renderInvestmentSummary() {
 }
 
 async function generateInvestmentPlan() {
+  if (!requirePremiumFeature("investments")) return;
   saveInvestmentProfile();
   const answer = document.getElementById("investmentAnswer");
   answer.textContent = "Gerando plano com base no seu perfil e nos seus números...";
@@ -1091,6 +1153,7 @@ async function generateInvestmentPlan() {
 }
 
 async function askInvestmentQuestion() {
+  if (!requirePremiumFeature("investments")) return;
   const question = getValue("investmentQuestion");
   const answer = document.getElementById("investmentAnswer");
   if (!question) {
@@ -1107,6 +1170,7 @@ async function askInvestmentQuestion() {
 }
 
 async function generateDecisionPlan() {
+  if (!requirePremiumFeature("investments")) return;
   const answer = document.getElementById("decisionAnswer");
   const decision = getDecisionContext();
   if (!decision.amount && !decision.notes) {
@@ -1734,6 +1798,10 @@ function calculatorTotalValue() {
 }
 
 async function handleInvoiceFiles(event) {
+  if (!requirePremiumFeature("invoiceImport")) {
+    event.target.value = "";
+    return;
+  }
   const files = [...event.target.files];
   if (!files.length) return;
 
@@ -1819,6 +1887,7 @@ function updatePreviewRow(event) {
 }
 
 function importSelectedPreviewRows() {
+  if (!requirePremiumFeature("invoiceImport")) return;
   const sourceValue = getValue("importSource");
   if (!sourceValue) {
     setImportStatus("Cadastre uma conta ou cartão antes de importar.");

@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=16" />
+    <link rel="stylesheet" href="styles.css?v=17" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -81,11 +81,11 @@
         </button>
         <button class="nav-tab" data-tab="import" title="Importar faturas">
           <span data-icon="upload"></span>
-          Importar
+          Importar <span class="premium-badge">Premium</span>
         </button>
         <button class="nav-tab" data-tab="investments" title="Investimentos">
           <span data-icon="trend"></span>
-          Investir
+          Investir <span class="premium-badge">Premium</span>
         </button>
       </nav>
 
@@ -568,13 +568,13 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">PDF da fatura</p>
-                <h2>Importar lançamentos</h2>
+                <h2>Importar lançamentos <span class="premium-badge">Premium</span></h2>
               </div>
             </div>
 
             <label class="upload-zone" for="invoiceFile">
               <span data-icon="upload"></span>
-              <strong>Selecionar PDF</strong>
+              <strong>Selecionar PDF <span class="premium-badge">Premium</span></strong>
               <small>Funciona melhor com PDFs pesquisáveis. Faturas escaneadas podem exigir colar o texto abaixo.</small>
               <input id="invoiceFile" type="file" accept="application/pdf,.pdf" multiple />
             </label>
@@ -606,7 +606,7 @@
             <div class="import-actions">
               <button class="primary-button" id="parseInvoiceText" type="button">
                 <span data-icon="sparkles"></span>
-                Analisar texto
+                Analisar texto <span class="premium-badge">Premium</span>
               </button>
               <button class="icon-button" id="clearImportPreview" type="button" title="Limpar prévia">
                 <span data-icon="trash"></span>
@@ -624,7 +624,7 @@
               </div>
               <button class="primary-button compact" id="importSelectedRows" type="button">
                 <span data-icon="check"></span>
-                Importar
+                Importar <span class="premium-badge">Premium</span>
               </button>
             </div>
             <div class="table-wrap">
@@ -652,7 +652,7 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Assessoria IA</p>
-                <h2>Perfil de investimento</h2>
+                <h2>Perfil de investimento <span class="premium-badge">Premium</span></h2>
               </div>
             </div>
 
@@ -703,7 +703,7 @@
 
             <button class="primary-button" id="saveInvestmentProfile" type="button">
               <span data-icon="check"></span>
-              Salvar perfil
+              Salvar perfil <span class="premium-badge">Premium</span>
             </button>
             <p class="import-status" id="investmentStatus">A IA usa seu perfil e seus dados financeiros para orientar próximos passos.</p>
           </section>
@@ -712,11 +712,11 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Plano</p>
-                <h2>Orientação de investimento</h2>
+                <h2>Orientação de investimento <span class="premium-badge">Premium</span></h2>
               </div>
               <button class="primary-button compact" id="generateInvestmentPlan" type="button">
                 <span data-icon="brain"></span>
-                Gerar plano
+                Gerar plano <span class="premium-badge">Premium</span>
               </button>
             </div>
 
@@ -729,7 +729,7 @@
               </label>
               <button class="primary-button" id="askInvestmentAi" type="button">
                 <span data-icon="send"></span>
-                Perguntar
+                Perguntar <span class="premium-badge">Premium</span>
               </button>
               <div class="coach-answer" id="investmentAnswer"></div>
             </div>
@@ -738,7 +738,7 @@
               <div class="panel-header compact-header">
                 <div>
                   <p class="eyebrow">Decisão</p>
-                  <h2>Planejador com IA</h2>
+                  <h2>Planejador com IA <span class="premium-badge">Premium</span></h2>
                 </div>
               </div>
               <div class="field-row">
@@ -773,7 +773,7 @@
               </label>
               <button class="primary-button" id="generateDecisionPlan" type="button">
                 <span data-icon="brain"></span>
-                Planejar decisão
+                Planejar decisão <span class="premium-badge">Premium</span>
               </button>
               <div class="coach-answer" id="decisionAnswer"></div>
             </div>
@@ -898,6 +898,32 @@
       </div>
     </section>
 
+    <section class="premium-modal" id="premiumModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="premiumModalTitle">
+      <div class="premium-modal-backdrop" data-close-premium-modal></div>
+      <div class="premium-modal-card">
+        <button class="icon-button premium-modal-close" id="closePremiumModal" type="button" title="Fechar">
+          <span data-icon="close"></span>
+        </button>
+        <span class="premium-modal-kicker">Premium</span>
+        <h2 id="premiumModalTitle">Libere essa função</h2>
+        <p id="premiumModalText">Essa ferramenta faz parte do plano Premium de R$ 29,90/mês.</p>
+        <ul>
+          <li>Contas, cartões e lançamentos ilimitados</li>
+          <li>Importação de faturas em PDF</li>
+          <li>Investimentos, IA e planejador de decisão</li>
+          <li>Exportação completa de entradas e saídas</li>
+        </ul>
+        <div class="premium-modal-actions">
+          <button class="primary-button" id="premiumSubscribeButton" type="button">
+            <span data-icon="check"></span>
+            Assinar Premium
+          </button>
+          <button class="secondary-button" id="premiumMaybeLater" type="button">Agora não</button>
+        </div>
+        <p class="premium-modal-note" id="premiumModalNote">Em breve conectaremos o checkout real.</p>
+      </div>
+    </section>
+
     <template id="emptyStateTemplate">
       <div class="empty-state">
         <span data-icon="empty"></span>
@@ -906,6 +932,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=25"></script>
+    <script src="app.js?v=26"></script>
   </body>
 </html>
