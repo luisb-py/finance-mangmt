@@ -1,4 +1,6 @@
 const STORAGE_KEY = "personalFinanceApp.v1";
+const SESSION_KEY = "personalFinanceApp.session";
+const INVESTMENT_PROFILE_KEY = "personalFinanceApp.investmentProfile";
 
 const initialState = {
   accounts: [],
@@ -13,6 +15,8 @@ let investmentPreviousResponseId = null;
 let authMode = "login";
 let editingCardId = null;
 let editingTransaction = null;
+let remoteSaveTimer = null;
+let isLoadingRemoteData = false;
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -57,6 +61,9 @@ document.addEventListener("DOMContentLoaded", () => {
   syncLoginState();
   setDefaultDate();
   render();
+  if (currentSession()) {
+    loadRemoteAppData({ migrateLocal: true });
+  }
   updateCalculatorVisibility(document.querySelector(".nav-tab.active")?.dataset.tab || "dashboard");
   window.addEventListener("resize", debounce(scheduleDashboardRender, 120));
   window.addEventListener("resize", debounce(syncTransactionsTableScroll, 120));
@@ -72,6 +79,109 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueRemoteSave();
+}
+
+function currentSession() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function queueRemoteSave() {
+  if (isLoadingRemoteData || !currentSession()?.accessToken) return;
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(() => {
+    saveRemoteAppData().catch(() => {});
+  }, 500);
+}
+
+function storedInvestmentProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(INVESTMENT_PROFILE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function appDataPayload() {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    state,
+    investmentProfile: getInvestmentProfileFromUiOrStorage(),
+  };
+}
+
+function getInvestmentProfileFromUiOrStorage() {
+  if (document.getElementById("investmentGoal")) {
+    return getInvestmentProfile();
+  }
+  return storedInvestmentProfile();
+}
+
+function hasLocalAppData() {
+  const profile = storedInvestmentProfile();
+  return Boolean(state.accounts.length || state.cards.length || state.transactions.length || Object.keys(profile).length);
+}
+
+async function loadRemoteAppData({ migrateLocal = false } = {}) {
+  const session = currentSession();
+  if (!session?.accessToken) return;
+
+  isLoadingRemoteData = true;
+  try {
+    const response = await fetch("/api/app-state", {
+      headers: { authorization: `Bearer ${session.accessToken}` },
+    });
+    const payload = await readJsonResponse(response);
+    if (!response.ok) throw new Error(payload.error || "Não foi possível carregar seus dados.");
+
+    if (payload.data?.state) {
+      state = normalizeState(payload.data.state);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (payload.data.investmentProfile) {
+        localStorage.setItem(INVESTMENT_PROFILE_KEY, JSON.stringify(payload.data.investmentProfile));
+      }
+      loadInvestmentProfile();
+      render();
+      return;
+    }
+
+    if (migrateLocal && hasLocalAppData()) {
+      await saveRemoteAppData();
+    }
+  } catch (error) {
+    console.warn(error.message || "Falha ao sincronizar dados.");
+  } finally {
+    isLoadingRemoteData = false;
+  }
+}
+
+async function saveRemoteAppData() {
+  const session = currentSession();
+  if (!session?.accessToken) return;
+
+  const response = await fetch("/api/app-state", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      authorization: `Bearer ${session.accessToken}`,
+    },
+    body: JSON.stringify({ data: appDataPayload() }),
+  });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) throw new Error(payload.error || "Não foi possível salvar seus dados.");
+}
+
+function normalizeState(value) {
+  return {
+    accounts: Array.isArray(value?.accounts) ? value.accounts : [],
+    cards: Array.isArray(value?.cards) ? value.cards : [],
+    transactions: Array.isArray(value?.transactions) ? value.transactions : [],
+  };
 }
 
 function hydrateIcons(root = document) {
@@ -175,7 +285,7 @@ function bindForms() {
   });
 
   document.getElementById("logoutButton").addEventListener("click", () => {
-    localStorage.removeItem("personalFinanceApp.session");
+    localStorage.removeItem(SESSION_KEY);
     syncLoginState();
   });
 
@@ -300,10 +410,11 @@ async function submitAuthForm() {
     if (!response.ok) throw new Error(data.error || "Falha na autenticação");
 
     localStorage.setItem(
-      "personalFinanceApp.session",
+      SESSION_KEY,
       JSON.stringify({
         name: data.user?.user_metadata?.username || data.user?.email || payload.username,
         email: data.user?.email || payload.email,
+        userId: data.user?.id || null,
         accessToken: data.session?.access_token || null,
         refreshToken: data.session?.refresh_token || null,
         signedAt: new Date().toISOString(),
@@ -311,6 +422,7 @@ async function submitAuthForm() {
     );
     status.textContent = "Acesso confirmado.";
     syncLoginState();
+    await loadRemoteAppData({ migrateLocal: true });
   } catch (error) {
     status.textContent = error.message || "Não foi possível autenticar.";
   }
@@ -545,7 +657,7 @@ function setAiStatus(message) {
 }
 
 function loadInvestmentProfile() {
-  const saved = JSON.parse(localStorage.getItem("personalFinanceApp.investmentProfile") || "{}");
+  const saved = storedInvestmentProfile();
   if (saved.goal) document.getElementById("investmentGoal").value = saved.goal;
   if (saved.riskProfile) document.getElementById("riskProfile").value = saved.riskProfile;
   if (saved.horizon) document.getElementById("investmentHorizon").value = saved.horizon;
@@ -555,7 +667,8 @@ function loadInvestmentProfile() {
 }
 
 function saveInvestmentProfile() {
-  localStorage.setItem("personalFinanceApp.investmentProfile", JSON.stringify(getInvestmentProfile()));
+  localStorage.setItem(INVESTMENT_PROFILE_KEY, JSON.stringify(getInvestmentProfile()));
+  queueRemoteSave();
   document.getElementById("investmentStatus").textContent = "Perfil salvo. A IA vai usar esses dados nas orientações.";
   renderInvestmentSummary();
 }
@@ -714,7 +827,7 @@ function initScrollAnimations() {
 }
 
 function syncLoginState() {
-  const session = localStorage.getItem("personalFinanceApp.session");
+  const session = localStorage.getItem(SESSION_KEY);
   document.body.classList.toggle("is-locked", !session);
   document.getElementById("loginScreen").setAttribute("aria-hidden", session ? "true" : "false");
 }

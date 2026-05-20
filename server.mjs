@@ -38,6 +38,16 @@ createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/app-state") {
+      await handleGetAppState(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/app-state") {
+      await handleSaveAppState(request, response);
+      return;
+    }
+
     if (request.method !== "GET") {
       sendJson(response, 405, { error: "Method not allowed" });
       return;
@@ -185,6 +195,99 @@ async function handleLogin(request, response) {
   }
 
   sendJson(response, 200, { user: data.user, session: data });
+}
+
+async function handleGetAppState(request, response) {
+  const auth = await authenticatedSupabaseUser(request);
+  if (auth.error) {
+    sendJson(response, auth.status, { error: auth.error });
+    return;
+  }
+
+  const { supabaseUrl, supabaseServiceRoleKey } = supabaseConfig();
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    sendJson(response, 503, { error: "SUPABASE_SERVICE_ROLE_KEY não configurada" });
+    return;
+  }
+
+  const stateResponse = await fetch(
+    `${supabaseUrl}/rest/v1/app_states?user_id=eq.${auth.user.id}&select=data,updated_at&limit=1`,
+    {
+      headers: {
+        ...supabaseHeaders(supabaseServiceRoleKey),
+        Accept: "application/json",
+      },
+    }
+  );
+  const data = await stateResponse.json();
+  if (!stateResponse.ok) {
+    sendJson(response, stateResponse.status, { error: data.message || data.error || "Erro ao carregar dados" });
+    return;
+  }
+
+  sendJson(response, 200, { data: data[0]?.data || null, updatedAt: data[0]?.updated_at || null });
+}
+
+async function handleSaveAppState(request, response) {
+  const auth = await authenticatedSupabaseUser(request);
+  if (auth.error) {
+    sendJson(response, auth.status, { error: auth.error });
+    return;
+  }
+
+  const { supabaseUrl, supabaseServiceRoleKey } = supabaseConfig();
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    sendJson(response, 503, { error: "SUPABASE_SERVICE_ROLE_KEY não configurada" });
+    return;
+  }
+
+  const payload = await readJson(request);
+  const appData = payload.data && typeof payload.data === "object" ? payload.data : {};
+  const stateResponse = await fetch(`${supabaseUrl}/rest/v1/app_states`, {
+    method: "POST",
+    headers: {
+      ...supabaseHeaders(supabaseServiceRoleKey),
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify({
+      user_id: auth.user.id,
+      data: appData,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+
+  if (!stateResponse.ok) {
+    const data = await stateResponse.json();
+    sendJson(response, stateResponse.status, { error: data.message || data.error || "Erro ao salvar dados" });
+    return;
+  }
+
+  sendJson(response, 200, { ok: true });
+}
+
+async function authenticatedSupabaseUser(request) {
+  const { supabaseUrl, supabaseAnonKey } = supabaseConfig();
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { status: 503, error: "SUPABASE_URL e SUPABASE_ANON_KEY não configuradas" };
+  }
+
+  const token = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
+  if (!token) {
+    return { status: 401, error: "Sessão não encontrada" };
+  }
+
+  const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      ...supabaseHeaders(supabaseAnonKey),
+      authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await authResponse.json();
+  if (!authResponse.ok) {
+    return { status: 401, error: data.msg || data.error_description || data.error || "Sessão inválida" };
+  }
+
+  return { user: data };
 }
 
 function supabaseConfig() {
