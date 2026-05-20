@@ -266,6 +266,10 @@ function currentPlanLimits() {
   return PLAN_LIMITS[currentPlan()];
 }
 
+function formatLimitValue(value) {
+  return Number.isFinite(value) ? value : "ilimitado";
+}
+
 function setSubscriptionPlan(plan, { persist = true } = {}) {
   state.subscription = normalizeSubscription({
     plan,
@@ -287,6 +291,111 @@ function renderPlanState() {
   pill.dataset.status = subscription.status;
   text.textContent = PLAN_LABELS[plan];
   pill.title = plan === "premium" ? "Plano Premium ativo" : "Plano Free ativo";
+}
+
+function showPlanLimitMessage(targetId, message) {
+  const target = document.getElementById(targetId);
+  if (target) {
+    target.textContent = message;
+    target.classList.add("is-visible", "is-alert");
+    return;
+  }
+  alert(message);
+}
+
+function clearPlanLimitMessage(targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  target.textContent = "";
+  target.classList.remove("is-visible", "is-alert");
+}
+
+function canCreateAccount() {
+  return isPremium() || state.accounts.length < currentPlanLimits().accounts;
+}
+
+function canCreateCard() {
+  return isPremium() || state.cards.length < currentPlanLimits().cards;
+}
+
+function transactionMonth(date) {
+  return String(date || new Date().toISOString()).slice(0, 7);
+}
+
+function transactionsWithCurrentEditRemoved() {
+  if (!editingTransaction) return [...state.transactions];
+  return state.transactions.filter((transaction) => {
+    if (editingTransaction.mode === "group") {
+      return transaction.installmentGroupId !== editingTransaction.groupId;
+    }
+    return transaction.id !== editingTransaction.id;
+  });
+}
+
+function transactionLimitIssue(entries, baseTransactions = state.transactions) {
+  const limit = currentPlanLimits().transactionsPerMonth;
+  if (!Number.isFinite(limit)) return null;
+
+  const countByMonth = baseTransactions.reduce((acc, transaction) => {
+    const month = transactionMonth(transaction.date);
+    acc[month] = (acc[month] || 0) + 1;
+    return acc;
+  }, {});
+
+  const addByMonth = entries.reduce((acc, transaction) => {
+    const month = transactionMonth(transaction.date);
+    acc[month] = (acc[month] || 0) + 1;
+    return acc;
+  }, {});
+
+  const blockedMonth = Object.keys(addByMonth).find((month) => (countByMonth[month] || 0) + addByMonth[month] > limit);
+  if (!blockedMonth) return null;
+
+  return {
+    month: blockedMonth,
+    current: countByMonth[blockedMonth] || 0,
+    added: addByMonth[blockedMonth],
+    limit,
+  };
+}
+
+function canAddTransactions(entries, targetId, baseTransactions = state.transactions) {
+  const issue = transactionLimitIssue(entries, baseTransactions);
+  if (!issue) {
+    clearPlanLimitMessage(targetId);
+    return true;
+  }
+
+  showPlanLimitMessage(
+    targetId,
+    `Plano Free permite ${issue.limit} lançamentos em ${formatMonth(issue.month)}. Você já tem ${issue.current} e está tentando adicionar ${issue.added}.`
+  );
+  return false;
+}
+
+function renderPlanUsage() {
+  const limits = currentPlanLimits();
+  const accountNotice = document.getElementById("accountLimitNotice");
+  const cardNotice = document.getElementById("cardLimitNotice");
+  const transactionNotice = document.getElementById("transactionLimitNotice");
+  const recurringNotice = document.getElementById("recurringLimitNotice");
+  const quickNotice = document.getElementById("quickEntryStatus");
+
+  if (accountNotice && !accountNotice.classList.contains("is-alert")) {
+    accountNotice.textContent = `Uso do plano: ${state.accounts.length}/${formatLimitValue(limits.accounts)} conta(s).`;
+  }
+  if (cardNotice && !cardNotice.classList.contains("is-alert")) {
+    cardNotice.textContent = `Uso do plano: ${state.cards.length}/${formatLimitValue(limits.cards)} cartão(ões).`;
+  }
+  if (transactionNotice && !transactionNotice.classList.contains("is-alert")) {
+    transactionNotice.textContent = `Plano atual: ${formatLimitValue(limits.transactionsPerMonth)} lançamentos por mês.`;
+  }
+  if (recurringNotice && !recurringNotice.classList.contains("is-alert")) {
+    recurringNotice.textContent = `Recorrências também respeitam o limite mensal do seu plano.`;
+  }
+  if (quickNotice && !quickNotice.classList.contains("is-alert")) {
+    quickNotice.textContent = `Lançamento rápido usa o limite mensal do plano.`;
+  }
 }
 
 function setSyncStatus(status, timestamp = null) {
@@ -343,6 +452,11 @@ function bindTabs() {
 function bindForms() {
   document.getElementById("accountForm").addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!canCreateAccount()) {
+      showPlanLimitMessage("accountLimitNotice", "Plano Free permite 1 conta. Faça upgrade para cadastrar contas ilimitadas.");
+      return;
+    }
+    clearPlanLimitMessage("accountLimitNotice");
     state.accounts.push({
       id: makeId(),
       name: getValue("accountName"),
@@ -362,6 +476,11 @@ function bindForms() {
     if (editingCardId) {
       state.cards = state.cards.map((card) => (card.id === editingCardId ? { ...card, ...payload } : card));
     } else {
+      if (!canCreateCard()) {
+        showPlanLimitMessage("cardLimitNotice", "Plano Free permite 2 cartões. Faça upgrade para cadastrar cartões ilimitados.");
+        return;
+      }
+      clearPlanLimitMessage("cardLimitNotice");
       state.cards.push({ id: makeId(), ...payload });
     }
     event.target.reset();
@@ -378,13 +497,10 @@ function bindForms() {
     const amount = Number(getValue("transactionAmount"));
     const installments = sourceType === "card" && type === "expense" ? getInstallmentCount() : 1;
     const entries = buildTransactionEntries({ sourceType, sourceId, type, amount, installments });
+    const baseTransactions = transactionsWithCurrentEditRemoved();
+    if (!canAddTransactions(entries, "transactionLimitNotice", baseTransactions)) return;
     if (editingTransaction) {
-      state.transactions = state.transactions.filter((transaction) => {
-        if (editingTransaction.mode === "group") {
-          return transaction.installmentGroupId !== editingTransaction.groupId;
-        }
-        return transaction.id !== editingTransaction.id;
-      });
+      state.transactions = baseTransactions;
     }
     state.transactions.push(...entries);
     resetTransactionForm();
@@ -408,8 +524,10 @@ function bindForms() {
       months: Math.min(60, Math.max(1, Number(getValue("recurringMonths") || 12))),
       createdAt: new Date().toISOString(),
     };
+    const recurringEntries = buildRecurringTransactionEntries(recurring);
+    if (!canAddTransactions(recurringEntries, "recurringLimitNotice")) return;
     state.recurringTransactions.push(recurring);
-    generateRecurringTransactions(recurring);
+    state.transactions.push(...recurringEntries);
     event.target.reset();
     setDefaultDate();
     persistAndRender();
@@ -508,7 +626,7 @@ function bindQuickEntry() {
   document.getElementById("quickEntryForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const [sourceType, sourceId] = getValue("quickTransactionSource").split(":");
-    state.transactions.push({
+    const entry = {
       id: makeId(),
       description: getValue("quickTransactionDescription"),
       type: getValue("quickTransactionType"),
@@ -517,7 +635,9 @@ function bindQuickEntry() {
       category: getValue("quickTransactionCategory"),
       sourceType,
       sourceId,
-    });
+    };
+    if (!canAddTransactions([entry], "quickEntryStatus")) return;
+    state.transactions.push(entry);
     event.target.reset();
     closePanel();
     persistAndRender();
@@ -1146,6 +1266,7 @@ function scheduleDashboardRender() {
 
 function render() {
   renderPlanState();
+  renderPlanUsage();
   ensureRecurringTransactions();
   renderSourceOptions();
   renderImportSourceOptions();
@@ -1711,8 +1832,7 @@ function importSelectedPreviewRows() {
     return;
   }
 
-  state.transactions.push(
-    ...selectedRows.map((row) => ({
+  const entries = selectedRows.map((row) => ({
       id: makeId(),
       description: row.description,
       type: row.type,
@@ -1721,8 +1841,16 @@ function importSelectedPreviewRows() {
       category: row.category || getValue("importDefaultCategory") || "Fatura",
       sourceType,
       sourceId,
-    }))
-  );
+    }));
+  const issue = transactionLimitIssue(entries);
+  if (issue) {
+    setImportStatus(
+      `Plano Free permite ${issue.limit} lançamentos em ${formatMonth(issue.month)}. Você já tem ${issue.current} e está tentando importar ${issue.added}.`
+    );
+    return;
+  }
+
+  state.transactions.push(...entries);
 
   importPreview = importPreview.filter((row) => !row.selected);
   saveState();
@@ -2211,14 +2339,27 @@ function ensureRecurringTransactions() {
 }
 
 function generateRecurringTransactions(recurring) {
+  const entries = buildRecurringTransactionEntries(recurring);
+  const allowedEntries = [];
+  entries.forEach((entry) => {
+    if (!transactionLimitIssue([entry], [...state.transactions, ...allowedEntries])) {
+      allowedEntries.push(entry);
+    }
+  });
+  if (!allowedEntries.length) return false;
+  state.transactions.push(...allowedEntries);
+  return true;
+}
+
+function buildRecurringTransactionEntries(recurring) {
   const months = Math.min(60, Math.max(1, Number(recurring.months || 12)));
-  let changed = false;
+  const entries = [];
   for (let index = 0; index < months; index += 1) {
     const date = addMonths(recurring.startDate, index);
     const recurringKey = `${recurring.id}:${date.slice(0, 7)}`;
     const exists = state.transactions.some((transaction) => transaction.recurringKey === recurringKey);
     if (exists) continue;
-    state.transactions.push({
+    entries.push({
       id: makeId(),
       description: recurring.description,
       type: recurring.type,
@@ -2230,9 +2371,8 @@ function generateRecurringTransactions(recurring) {
       recurringId: recurring.id,
       recurringKey,
     });
-    changed = true;
   }
-  return changed;
+  return entries;
 }
 
 function buildTransactionEntries({ sourceType, sourceId, type, amount, installments }) {
@@ -2384,11 +2524,12 @@ function demoState() {
   const cardA = makeId();
   const cardB = makeId();
   const month = new Date().toISOString().slice(0, 7);
+  const premium = isPremium();
   return {
     subscription: currentSubscription(),
     accounts: [
       { id: accountA, name: "Conta principal", initialBalance: 3200 },
-      { id: accountB, name: "Reserva", initialBalance: 8500 },
+      ...(premium ? [{ id: accountB, name: "Reserva", initialBalance: 8500 }] : []),
     ],
     cards: [
       { id: cardA, name: "Cartão do dia a dia", limit: 4500, closeDay: 12 },
@@ -2399,7 +2540,7 @@ function demoState() {
       { id: makeId(), description: "Aluguel", type: "expense", amount: 1850, date: `${month}-06`, category: "Moradia", sourceType: "account", sourceId: accountA },
       { id: makeId(), description: "Supermercado", type: "expense", amount: 720, date: `${month}-09`, category: "Alimentação", sourceType: "card", sourceId: cardA },
       { id: makeId(), description: "Internet", type: "expense", amount: 129.9, date: `${month}-10`, category: "Casa", sourceType: "account", sourceId: accountA },
-      { id: makeId(), description: "Freela", type: "income", amount: 950, date: `${month}-14`, category: "Renda extra", sourceType: "account", sourceId: accountB },
+      { id: makeId(), description: "Freela", type: "income", amount: 950, date: `${month}-14`, category: "Renda extra", sourceType: "account", sourceId: premium ? accountB : accountA },
       { id: makeId(), description: "Restaurante", type: "expense", amount: 186.5, date: `${month}-15`, category: "Lazer", sourceType: "card", sourceId: cardA },
       { id: makeId(), description: "Passagens", type: "expense", amount: 1340, date: `${month}-18`, category: "Viagem", sourceType: "card", sourceId: cardB },
     ],

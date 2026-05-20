@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=15" />
+    <link rel="stylesheet" href="styles.css?v=16" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -301,6 +301,7 @@
               </button>
               <button class="secondary-button hidden" id="cancelTransactionEdit" type="button">Cancelar</button>
             </div>
+            <p class="plan-limit-note" id="transactionLimitNotice"></p>
           </form>
 
           <form class="panel form-panel" id="recurringForm">
@@ -355,6 +356,7 @@
               <span data-icon="calendar"></span>
               Criar recorrência
             </button>
+            <p class="plan-limit-note" id="recurringLimitNotice"></p>
           </form>
           </div>
 
@@ -503,6 +505,7 @@
               <span data-icon="plus"></span>
               Cadastrar conta
             </button>
+            <p class="plan-limit-note" id="accountLimitNotice"></p>
           </form>
 
           <form class="panel form-panel" id="cardForm">
@@ -534,6 +537,7 @@
               </button>
               <button class="secondary-button hidden" id="cancelCardEdit" type="button">Cancelar</button>
             </div>
+            <p class="plan-limit-note" id="cardLimitNotice"></p>
           </form>
 
           <section class="panel table-panel">
@@ -823,6 +827,7 @@
             <span data-icon="check"></span>
             Salvar lançamento
           </button>
+          <p class="plan-limit-note" id="quickEntryStatus"></p>
         </form>
       </div>
     </section>
@@ -901,6 +906,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=24"></script>
+    <script src="app.js?v=25"></script>
   </body>
 </html>

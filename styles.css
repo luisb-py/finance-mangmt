@@ -885,6 +885,18 @@ label textarea:hover {
   max-width: 220px;
 }
 
+.plan-limit-note {
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.plan-limit-note.is-alert {
+  color: var(--gold);
+}
+
 .form-panel {
   align-self: start;
 }
