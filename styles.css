@@ -359,6 +359,10 @@ body[data-theme="light"] .brand-logo-dark {
   text-transform: uppercase;
 }
 
+body[data-plan="premium"] .premium-badge {
+  display: none !important;
+}
+
 h2 .premium-badge,
 button .premium-badge {
   margin-left: 6px;
