@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=14" />
+    <link rel="stylesheet" href="styles.css?v=15" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -105,6 +105,10 @@
           <div class="sync-status" id="syncStatus" title="Status de sincronização">
             <span class="sync-dot"></span>
             <span id="syncStatusText">Local</span>
+          </div>
+          <div class="plan-pill" id="planPill" data-plan="free" title="Plano atual">
+            <span class="plan-dot"></span>
+            <span id="planPillText">Plano Free</span>
           </div>
           <button class="theme-toggle" id="themeToggle" type="button" title="Alternar tema" aria-label="Alternar tema">
             <span class="theme-toggle-track">
@@ -897,6 +901,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=23"></script>
+    <script src="app.js?v=24"></script>
   </body>
 </html>

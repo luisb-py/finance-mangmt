@@ -2,7 +2,32 @@ const STORAGE_KEY = "personalFinanceApp.v1";
 const SESSION_KEY = "personalFinanceApp.session";
 const INVESTMENT_PROFILE_KEY = "personalFinanceApp.investmentProfile";
 
+const PLAN_LIMITS = {
+  free: {
+    accounts: 1,
+    cards: 2,
+    transactionsPerMonth: 100,
+    invoiceImport: false,
+    investments: false,
+    export: false,
+  },
+  premium: {
+    accounts: Infinity,
+    cards: Infinity,
+    transactionsPerMonth: Infinity,
+    invoiceImport: true,
+    investments: true,
+    export: true,
+  },
+};
+
+const PLAN_LABELS = {
+  free: "Plano Free",
+  premium: "Premium",
+};
+
 const initialState = {
+  subscription: defaultSubscription(),
   accounts: [],
   cards: [],
   transactions: [],
@@ -198,11 +223,70 @@ async function saveRemoteAppData() {
 
 function normalizeState(value) {
   return {
+    subscription: normalizeSubscription(value?.subscription),
     accounts: Array.isArray(value?.accounts) ? value.accounts : [],
     cards: Array.isArray(value?.cards) ? value.cards : [],
     transactions: Array.isArray(value?.transactions) ? value.transactions : [],
     recurringTransactions: Array.isArray(value?.recurringTransactions) ? value.recurringTransactions : [],
   };
+}
+
+function defaultSubscription() {
+  return {
+    plan: "free",
+    status: "active",
+    updatedAt: null,
+  };
+}
+
+function normalizeSubscription(value = {}) {
+  const plan = value?.plan === "premium" ? "premium" : "free";
+  const status = value?.status === "inactive" ? "inactive" : "active";
+  return {
+    plan,
+    status,
+    updatedAt: value?.updatedAt || null,
+  };
+}
+
+function currentSubscription() {
+  return normalizeSubscription(state.subscription);
+}
+
+function currentPlan() {
+  const subscription = currentSubscription();
+  return subscription.plan === "premium" && subscription.status === "active" ? "premium" : "free";
+}
+
+function isPremium() {
+  return currentPlan() === "premium";
+}
+
+function currentPlanLimits() {
+  return PLAN_LIMITS[currentPlan()];
+}
+
+function setSubscriptionPlan(plan, { persist = true } = {}) {
+  state.subscription = normalizeSubscription({
+    plan,
+    status: "active",
+    updatedAt: new Date().toISOString(),
+  });
+  renderPlanState();
+  if (persist) saveState();
+}
+
+function renderPlanState() {
+  const plan = currentPlan();
+  const subscription = currentSubscription();
+  const pill = document.getElementById("planPill");
+  const text = document.getElementById("planPillText");
+  document.body.dataset.plan = plan;
+  if (!pill || !text) return;
+  pill.dataset.plan = plan;
+  pill.dataset.status = subscription.status;
+  text.textContent = PLAN_LABELS[plan];
+  pill.title = plan === "premium" ? "Plano Premium ativo" : "Plano Free ativo";
 }
 
 function setSyncStatus(status, timestamp = null) {
@@ -349,7 +433,8 @@ function bindForms() {
 
   document.getElementById("clearData").addEventListener("click", () => {
     if (confirm("Deseja apagar todos os dados cadastrados?")) {
-      state = structuredClone(initialState);
+      const subscription = currentSubscription();
+      state = normalizeState({ ...structuredClone(initialState), subscription });
       resetTransactionForm();
       resetCardForm();
       persistAndRender();
@@ -680,6 +765,8 @@ function buildAiContext() {
   const transactions = state.transactions.slice().sort((a, b) => b.date.localeCompare(a.date));
   return {
     stats,
+    subscription: currentSubscription(),
+    planLimits: currentPlanLimits(),
     investmentProfile: getInvestmentProfile(),
     decisionContext: document.getElementById("decisionType") ? getDecisionContext() : null,
     diagnostics: buildFinancialDiagnostics(stats),
@@ -1058,6 +1145,7 @@ function scheduleDashboardRender() {
 }
 
 function render() {
+  renderPlanState();
   ensureRecurringTransactions();
   renderSourceOptions();
   renderImportSourceOptions();
@@ -2297,6 +2385,7 @@ function demoState() {
   const cardB = makeId();
   const month = new Date().toISOString().slice(0, 7);
   return {
+    subscription: currentSubscription(),
     accounts: [
       { id: accountA, name: "Conta principal", initialBalance: 3200 },
       { id: accountB, name: "Reserva", initialBalance: 8500 },
