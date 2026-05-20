@@ -1,6 +1,7 @@
 const STORAGE_KEY = "personalFinanceApp.v1";
 const SESSION_KEY = "personalFinanceApp.session";
 const INVESTMENT_PROFILE_KEY = "personalFinanceApp.investmentProfile";
+const APP_OWNER_KEY = "personalFinanceApp.owner";
 
 const PLAN_LIMITS = {
   free: {
@@ -107,7 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setDefaultDate();
   render();
   if (currentSession()) {
-    loadRemoteAppData({ migrateLocal: true });
+    loadRemoteAppData();
   }
   updateCalculatorVisibility(document.querySelector(".nav-tab.active")?.dataset.tab || "dashboard");
   window.addEventListener("resize", debounce(scheduleDashboardRender, 120));
@@ -125,6 +126,10 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const session = currentSession();
+  if (session?.userId) {
+    localStorage.setItem(APP_OWNER_KEY, session.userId);
+  }
   queueRemoteSave();
 }
 
@@ -166,6 +171,15 @@ function appDataPayload() {
   };
 }
 
+function clearLocalAppCache() {
+  clearTimeout(remoteSaveTimer);
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(INVESTMENT_PROFILE_KEY);
+  localStorage.removeItem(APP_OWNER_KEY);
+  importPreview = [];
+  state = normalizeState(structuredClone(initialState));
+}
+
 function getInvestmentProfileFromUiOrStorage() {
   if (document.getElementById("investmentGoal")) {
     return getInvestmentProfile();
@@ -178,7 +192,7 @@ function hasLocalAppData() {
   return Boolean(state.accounts.length || state.cards.length || state.transactions.length || Object.keys(profile).length);
 }
 
-async function loadRemoteAppData({ migrateLocal = false } = {}) {
+async function loadRemoteAppData() {
   const session = currentSession();
   if (!session?.accessToken) return;
 
@@ -194,8 +208,11 @@ async function loadRemoteAppData({ migrateLocal = false } = {}) {
     if (payload.data?.state) {
       state = normalizeState(payload.data.state);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(APP_OWNER_KEY, session.userId || session.email || "");
       if (payload.data.investmentProfile) {
         localStorage.setItem(INVESTMENT_PROFILE_KEY, JSON.stringify(payload.data.investmentProfile));
+      } else {
+        localStorage.removeItem(INVESTMENT_PROFILE_KEY);
       }
       loadInvestmentProfile();
       render();
@@ -203,11 +220,14 @@ async function loadRemoteAppData({ migrateLocal = false } = {}) {
       return;
     }
 
-    if (migrateLocal && hasLocalAppData()) {
-      await saveRemoteAppData();
-    } else {
-      setSyncStatus("saved", payload.updatedAt);
-    }
+    state = normalizeState(structuredClone(initialState));
+    importPreview = [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(APP_OWNER_KEY, session.userId || session.email || "");
+    localStorage.removeItem(INVESTMENT_PROFILE_KEY);
+    loadInvestmentProfile();
+    render();
+    setSyncStatus("saved", payload.updatedAt);
   } catch (error) {
     console.warn(error.message || "Falha ao sincronizar dados.");
     setSyncStatus("error");
@@ -620,7 +640,9 @@ function bindForms() {
 
   document.getElementById("logoutButton").addEventListener("click", () => {
     localStorage.removeItem(SESSION_KEY);
+    clearLocalAppCache();
     syncLoginState();
+    render();
   });
 
   document.getElementById("invoiceFile").addEventListener("change", handleInvoiceFiles);
@@ -810,20 +832,20 @@ async function submitAuthForm() {
     const data = await readJsonResponse(response);
     if (!response.ok) throw new Error(data.error || "Falha na autenticação");
 
-    localStorage.setItem(
-      SESSION_KEY,
-      JSON.stringify({
-        name: data.user?.user_metadata?.username || data.user?.email || payload.username,
-        email: data.user?.email || payload.email,
-        userId: data.user?.id || null,
-        accessToken: data.session?.access_token || null,
-        refreshToken: data.session?.refresh_token || null,
-        signedAt: new Date().toISOString(),
-      })
-    );
+    const session = {
+      name: data.user?.user_metadata?.username || data.user?.email || payload.username,
+      email: data.user?.email || payload.email,
+      userId: data.user?.id || null,
+      accessToken: data.session?.access_token || null,
+      refreshToken: data.session?.refresh_token || null,
+      signedAt: new Date().toISOString(),
+    };
+    clearLocalAppCache();
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    if (session.userId) localStorage.setItem(APP_OWNER_KEY, session.userId);
     status.textContent = "Acesso confirmado.";
     syncLoginState();
-    await loadRemoteAppData({ migrateLocal: true });
+    await loadRemoteAppData();
   } catch (error) {
     status.textContent = error.message || "Não foi possível autenticar.";
   }
@@ -1068,6 +1090,12 @@ function setAiStatus(message) {
 
 function loadInvestmentProfile() {
   const saved = storedInvestmentProfile();
+  document.getElementById("investmentGoal").value = saved.goal || "reserva";
+  document.getElementById("riskProfile").value = saved.riskProfile || "conservador";
+  document.getElementById("investmentHorizon").value = saved.horizon || "curto";
+  document.getElementById("monthlyInvestment").value = saved.monthlyInvestment ?? 300;
+  document.getElementById("emergencyReserve").value = saved.emergencyReserve ?? 0;
+  document.getElementById("investmentNotes").value = saved.notes || "";
   if (saved.goal) document.getElementById("investmentGoal").value = saved.goal;
   if (saved.riskProfile) document.getElementById("riskProfile").value = saved.riskProfile;
   if (saved.horizon) document.getElementById("investmentHorizon").value = saved.horizon;
