@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=18" />
+    <link rel="stylesheet" href="styles.css?v=19" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -87,6 +87,10 @@
           <span data-icon="trend"></span>
           Investir <span class="premium-badge">Premium</span>
         </button>
+        <button class="nav-tab" data-tab="profile" title="Perfil">
+          <span data-icon="user"></span>
+          Perfil
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -99,6 +103,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">Visão financeira</p>
+          <p class="welcome-message" id="welcomeMessage">Olá.</p>
           <h1>Controle pessoal simples</h1>
         </div>
         <div class="topbar-actions">
@@ -781,6 +786,73 @@
         </div>
       </section>
 
+      <section class="tab-panel" id="profile">
+        <div class="profile-hero panel">
+          <div>
+            <p class="eyebrow">Perfil</p>
+            <h2 id="profileGreeting">Olá.</h2>
+            <p>Gerencie seus dados de acesso e escolha como quer ser chamado no app.</p>
+          </div>
+          <div class="profile-avatar" aria-hidden="true" id="profileAvatar">U</div>
+        </div>
+
+        <div class="work-grid two">
+          <form class="panel form-panel profile-panel" id="profileForm">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Dados da conta</p>
+                <h2>Informações pessoais</h2>
+              </div>
+            </div>
+            <label>
+              Nome para exibir
+              <input id="profileName" type="text" placeholder="Como quer ser chamado" autocomplete="name" />
+            </label>
+            <label>
+              Email
+              <input id="profileEmail" type="email" readonly />
+            </label>
+            <div class="profile-details">
+              <div>
+                <span>Plano atual</span>
+                <strong id="profilePlan">Plano Free</strong>
+              </div>
+              <div>
+                <span>Status</span>
+                <strong id="profileSyncStatus">Sincronizado</strong>
+              </div>
+            </div>
+            <button class="primary-button" id="saveProfile" type="submit">
+              <span data-icon="check"></span>
+              Salvar perfil
+            </button>
+            <p class="plan-limit-note" id="profileStatus"></p>
+          </form>
+
+          <form class="panel form-panel profile-panel" id="passwordForm">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Segurança</p>
+                <h2>Alterar senha</h2>
+              </div>
+            </div>
+            <label>
+              Nova senha
+              <input id="newPassword" type="password" minlength="6" autocomplete="new-password" placeholder="Mínimo de 6 caracteres" />
+            </label>
+            <label>
+              Confirmar nova senha
+              <input id="confirmPassword" type="password" minlength="6" autocomplete="new-password" placeholder="Repita a nova senha" />
+            </label>
+            <button class="secondary-button" id="updatePassword" type="submit">
+              <span data-icon="lock"></span>
+              Atualizar senha
+            </button>
+            <p class="plan-limit-note" id="passwordStatus"></p>
+          </form>
+        </div>
+      </section>
+
     </main>
 
     <section class="quick-entry-widget" id="quickEntryWidget" aria-label="Lançamento rápido">
@@ -932,6 +1004,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=28"></script>
+    <script src="app.js?v=29"></script>
   </body>
 </html>

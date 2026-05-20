@@ -67,6 +67,7 @@ const icons = {
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
   transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h14l-4-4"/><path d="M17 17H3l4 4"/></svg>',
   wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M16 13h.01"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>',
   sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
@@ -109,6 +110,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setDefaultDate();
   render();
   if (currentSession()) {
+    loadRemoteProfile();
     loadRemoteAppData();
   }
   updateCalculatorVisibility(document.querySelector(".nav-tab.active")?.dataset.tab || "dashboard");
@@ -140,6 +142,33 @@ function currentSession() {
   } catch {
     return null;
   }
+}
+
+function updateSession(patch) {
+  const session = currentSession();
+  if (!session) return null;
+  const nextSession = { ...session, ...patch };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+  return nextSession;
+}
+
+function preferredName(session = currentSession()) {
+  const rawName = String(session?.name || "").trim();
+  if (rawName) return rawName;
+  const emailName = String(session?.email || "").split("@")[0]?.trim();
+  return emailName || "usuário";
+}
+
+function updateGreeting() {
+  const session = currentSession();
+  const name = preferredName(session);
+  const greeting = session ? `Olá, ${name}.` : "Olá.";
+  const welcome = document.getElementById("welcomeMessage");
+  const profileGreeting = document.getElementById("profileGreeting");
+  const avatar = document.getElementById("profileAvatar");
+  if (welcome) welcome.textContent = greeting;
+  if (profileGreeting) profileGreeting.textContent = greeting;
+  if (avatar) avatar.textContent = name.slice(0, 1).toUpperCase();
 }
 
 function queueRemoteSave() {
@@ -234,6 +263,33 @@ async function loadRemoteAppData() {
     setSyncStatus("error");
   } finally {
     isLoadingRemoteData = false;
+  }
+}
+
+async function loadRemoteProfile() {
+  const session = currentSession();
+  if (!session?.accessToken) {
+    renderProfile();
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/profile", {
+      headers: { authorization: `Bearer ${session.accessToken}` },
+    });
+    const payload = await readJsonResponse(response);
+    if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o perfil.");
+    if (payload.profile) {
+      updateSession({
+        name: payload.profile.username || session.name,
+        email: payload.profile.email || session.email,
+      });
+    }
+  } catch (error) {
+    console.warn(error.message || "Falha ao carregar perfil.");
+  } finally {
+    updateGreeting();
+    renderProfile();
   }
 }
 
@@ -574,6 +630,15 @@ function bindTabs() {
 }
 
 function bindForms() {
+  document.getElementById("profileForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveProfileSettings();
+  });
+  document.getElementById("passwordForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    updateProfilePassword();
+  });
+
   document.getElementById("accountForm").addEventListener("submit", (event) => {
     event.preventDefault();
     if (!canCreateAccount()) {
@@ -878,8 +943,8 @@ async function submitAuthForm() {
     if (!response.ok) throw new Error(data.error || "Falha na autenticação");
 
     const session = {
-      name: data.user?.user_metadata?.username || data.user?.email || payload.username,
-      email: data.user?.email || payload.email,
+      name: data.profile?.username || data.user?.user_metadata?.username || payload.username || data.user?.email,
+      email: data.profile?.email || data.user?.email || payload.email,
       userId: data.user?.id || null,
       accessToken: data.session?.access_token || null,
       refreshToken: data.session?.refresh_token || null,
@@ -890,9 +955,90 @@ async function submitAuthForm() {
     if (session.userId) localStorage.setItem(APP_OWNER_KEY, session.userId);
     status.textContent = "Acesso confirmado.";
     syncLoginState();
+    await loadRemoteProfile();
     await loadRemoteAppData();
   } catch (error) {
     status.textContent = error.message || "Não foi possível autenticar.";
+  }
+}
+
+function setProfileStatus(id, message, isAlert = false) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  target.textContent = message;
+  target.classList.toggle("is-visible", Boolean(message));
+  target.classList.toggle("is-alert", isAlert);
+}
+
+async function saveProfileSettings() {
+  const session = currentSession();
+  const username = getValue("profileName");
+  if (!session?.accessToken) {
+    setProfileStatus("profileStatus", "Entre na sua conta para salvar o perfil.", true);
+    return;
+  }
+  if (username.length < 2) {
+    setProfileStatus("profileStatus", "Informe um nome com pelo menos 2 caracteres.", true);
+    return;
+  }
+
+  setProfileStatus("profileStatus", "Salvando perfil...");
+  try {
+    const response = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        authorization: `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify({ username }),
+    });
+    const payload = await readJsonResponse(response);
+    if (!response.ok) throw new Error(payload.error || "Não foi possível salvar o perfil.");
+    updateSession({
+      name: payload.profile?.username || username,
+      email: payload.profile?.email || session.email,
+    });
+    updateGreeting();
+    renderProfile();
+    setProfileStatus("profileStatus", "Perfil atualizado.");
+  } catch (error) {
+    setProfileStatus("profileStatus", error.message || "Não foi possível salvar o perfil.", true);
+  }
+}
+
+async function updateProfilePassword() {
+  const session = currentSession();
+  const password = getValue("newPassword");
+  const confirmPassword = getValue("confirmPassword");
+  if (!session?.accessToken) {
+    setProfileStatus("passwordStatus", "Entre na sua conta para alterar a senha.", true);
+    return;
+  }
+  if (password.length < 6) {
+    setProfileStatus("passwordStatus", "A nova senha precisa ter pelo menos 6 caracteres.", true);
+    return;
+  }
+  if (password !== confirmPassword) {
+    setProfileStatus("passwordStatus", "As senhas não conferem.", true);
+    return;
+  }
+
+  setProfileStatus("passwordStatus", "Atualizando senha...");
+  try {
+    const response = await fetch("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        authorization: `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+    const payload = await readJsonResponse(response);
+    if (!response.ok) throw new Error(payload.error || "Não foi possível alterar a senha.");
+    document.getElementById("passwordForm")?.reset();
+    setProfileStatus("passwordStatus", "Senha alterada com sucesso.");
+  } catch (error) {
+    setProfileStatus("passwordStatus", error.message || "Não foi possível alterar a senha.", true);
   }
 }
 
@@ -1371,6 +1517,8 @@ function syncLoginState() {
   document.body.classList.toggle("is-locked", !session);
   document.getElementById("loginScreen").setAttribute("aria-hidden", session ? "true" : "false");
   if (!session) setSyncStatus("local");
+  updateGreeting();
+  renderProfile();
 }
 
 function setDefaultDate() {
@@ -1404,6 +1552,7 @@ function scheduleDashboardRender() {
 function render() {
   renderPlanState();
   renderPlanUsage();
+  renderProfile();
   ensureRecurringTransactions();
   renderSourceOptions();
   renderImportSourceOptions();
@@ -1418,6 +1567,24 @@ function render() {
   renderImportPreview();
   loadInvestmentProfile();
   renderInvestmentSummary();
+}
+
+function renderProfile() {
+  const session = currentSession();
+  const name = preferredName(session);
+  const email = session?.email || "";
+  const profileName = document.getElementById("profileName");
+  const profileEmail = document.getElementById("profileEmail");
+  const profilePlan = document.getElementById("profilePlan");
+  const profileSyncStatus = document.getElementById("profileSyncStatus");
+
+  updateGreeting();
+  if (profileName && document.activeElement !== profileName) profileName.value = session ? name : "";
+  if (profileEmail) profileEmail.value = email;
+  if (profilePlan) profilePlan.textContent = PLAN_LABELS[currentPlan()];
+  if (profileSyncStatus) {
+    profileSyncStatus.textContent = session?.accessToken ? "Conta conectada ao Supabase" : "Acesso local";
+  }
 }
 
 function renderDashboardCardFilter() {

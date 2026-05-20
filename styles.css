@@ -401,6 +401,14 @@ button .premium-badge {
   margin-bottom: 24px;
 }
 
+.welcome-message {
+  margin-top: 6px;
+  color: var(--green);
+  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  font-weight: 820;
+  letter-spacing: 0;
+}
+
 .dashboard-toolbar {
   display: flex;
   align-items: center;
@@ -930,6 +938,79 @@ label textarea:hover {
 
 .form-panel {
   align-self: start;
+}
+
+.profile-hero {
+  display: flex;
+  min-height: 156px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--green) 14%, transparent), transparent 58%),
+    var(--surface);
+}
+
+.profile-hero h2 {
+  margin-top: 6px;
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
+}
+
+.profile-hero p:not(.eyebrow) {
+  max-width: 560px;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.profile-avatar {
+  display: grid;
+  width: 82px;
+  height: 82px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--green) 44%, transparent);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.18), transparent 42%),
+    linear-gradient(135deg, var(--green), #06443b);
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 900;
+  box-shadow: 0 22px 46px rgba(6, 95, 70, 0.26);
+}
+
+.profile-panel input[readonly] {
+  cursor: default;
+  color: var(--muted);
+}
+
+.profile-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-details > div {
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 13px;
+}
+
+.profile-details span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.profile-details strong {
+  display: block;
+  margin-top: 9px;
+  color: var(--ink);
+  font-size: 0.98rem;
 }
 
 .recurring-panel {
@@ -1957,7 +2038,7 @@ button:hover [data-icon],
 
   .nav-tabs {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 4px;
   }
 
@@ -2009,9 +2090,20 @@ button:hover [data-icon],
   .topbar,
   .dashboard-toolbar,
   .panel-header,
+  .profile-hero,
   .field-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .profile-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 1.55rem;
+  }
+
+  .profile-details {
+    grid-template-columns: 1fr;
   }
 
   .topbar-actions {

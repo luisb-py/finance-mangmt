@@ -40,6 +40,21 @@ createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/auth/update-password") {
+      await handleUpdatePassword(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/profile") {
+      await handleGetProfile(request, response);
+      return;
+    }
+
+    if (request.method === "PATCH" && url.pathname === "/api/profile") {
+      await handleUpdateProfile(request, response);
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/app-state") {
       await handleGetAppState(request, response);
       return;
@@ -176,7 +191,8 @@ async function handleRegister(request, response) {
   }
 
   await upsertProfile({ id: data.user?.id, email, username });
-  sendJson(response, 200, { user: data.user, session: data.session, message: data.session ? "Registrado" : "Verifique seu email para confirmar o cadastro." });
+  const profile = await profileForUser(data.user, { fallbackUsername: username, fallbackEmail: email });
+  sendJson(response, 200, { user: data.user, session: data.session, profile, message: data.session ? "Registrado" : "Verifique seu email para confirmar o cadastro." });
 }
 
 async function handleLogin(request, response) {
@@ -207,7 +223,75 @@ async function handleLogin(request, response) {
     return;
   }
 
-  sendJson(response, 200, { user: data.user, session: data });
+  const profile = await profileForUser(data.user);
+  sendJson(response, 200, { user: data.user, session: data, profile });
+}
+
+async function handleUpdatePassword(request, response) {
+  const auth = await authenticatedSupabaseUser(request);
+  if (auth.error) {
+    sendJson(response, auth.status, { error: auth.error });
+    return;
+  }
+
+  const { supabaseUrl, supabaseAnonKey } = supabaseConfig();
+  const payload = await readJson(request);
+  const password = String(payload.password || "");
+  if (password.length < 6) {
+    sendJson(response, 400, { error: "A senha precisa ter pelo menos 6 caracteres." });
+    return;
+  }
+
+  const updateResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      ...supabaseHeaders(supabaseAnonKey),
+      authorization: request.headers.authorization,
+    },
+    body: JSON.stringify({ password }),
+  });
+  const data = await updateResponse.json().catch(() => ({}));
+  if (!updateResponse.ok) {
+    sendJson(response, updateResponse.status, { error: data.msg || data.error_description || data.error || "Erro ao alterar senha" });
+    return;
+  }
+
+  sendJson(response, 200, { ok: true });
+}
+
+async function handleGetProfile(request, response) {
+  const auth = await authenticatedSupabaseUser(request);
+  if (auth.error) {
+    sendJson(response, auth.status, { error: auth.error });
+    return;
+  }
+
+  const profile = await profileForUser(auth.user);
+  sendJson(response, 200, { profile });
+}
+
+async function handleUpdateProfile(request, response) {
+  const auth = await authenticatedSupabaseUser(request);
+  if (auth.error) {
+    sendJson(response, auth.status, { error: auth.error });
+    return;
+  }
+
+  const payload = await readJson(request);
+  const username = String(payload.username || "").trim();
+  if (username.length < 2) {
+    sendJson(response, 400, { error: "Informe um nome com pelo menos 2 caracteres." });
+    return;
+  }
+
+  const profile = await upsertProfile({
+    id: auth.user.id,
+    username,
+    email: auth.user.email,
+  });
+  await updateOwnUserMetadata(request, { username });
+
+  sendJson(response, 200, { profile: profile || profileFallback(auth.user, { fallbackUsername: username }) });
 }
 
 async function handleGetAppState(request, response) {
@@ -525,13 +609,13 @@ function supabaseHeaders(key) {
 
 async function upsertProfile(profile) {
   const { supabaseUrl, supabaseServiceRoleKey } = supabaseConfig();
-  if (!supabaseUrl || !supabaseServiceRoleKey || !profile.id) return;
+  if (!supabaseUrl || !supabaseServiceRoleKey || !profile.id) return profileFallback(null, profile);
 
-  await fetch(`${supabaseUrl}/rest/v1/profiles`, {
+  const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles`, {
     method: "POST",
     headers: {
       ...supabaseHeaders(supabaseServiceRoleKey),
-      Prefer: "resolution=merge-duplicates",
+      Prefer: "resolution=merge-duplicates,return=representation",
     },
     body: JSON.stringify({
       id: profile.id,
@@ -539,6 +623,51 @@ async function upsertProfile(profile) {
       email: profile.email,
     }),
   });
+
+  const data = await profileResponse.json().catch(() => []);
+  if (!profileResponse.ok) return profileFallback(null, profile);
+  return data[0] || profileFallback(null, profile);
+}
+
+async function profileForUser(user, fallback = {}) {
+  if (!user?.id) return profileFallback(user, fallback);
+
+  const { supabaseUrl, supabaseServiceRoleKey } = supabaseConfig();
+  if (!supabaseUrl || !supabaseServiceRoleKey) return profileFallback(user, fallback);
+
+  const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${user.id}&select=id,username,email&limit=1`, {
+    headers: {
+      ...supabaseHeaders(supabaseServiceRoleKey),
+      Accept: "application/json",
+    },
+  });
+  const data = await profileResponse.json().catch(() => []);
+  if (!profileResponse.ok || !data[0]) return profileFallback(user, fallback);
+  return data[0];
+}
+
+function profileFallback(user, fallback = {}) {
+  const email = fallback.fallbackEmail || fallback.email || user?.email || "";
+  const username = fallback.fallbackUsername || fallback.username || user?.user_metadata?.username || email.split("@")[0] || "usuário";
+  return {
+    id: fallback.id || user?.id || null,
+    username,
+    email,
+  };
+}
+
+async function updateOwnUserMetadata(request, metadata) {
+  const { supabaseUrl, supabaseAnonKey } = supabaseConfig();
+  if (!supabaseUrl || !supabaseAnonKey) return;
+
+  await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      ...supabaseHeaders(supabaseAnonKey),
+      authorization: request.headers.authorization,
+    },
+    body: JSON.stringify({ data: metadata }),
+  }).catch(() => null);
 }
 
 function buildInstructions(mode) {
