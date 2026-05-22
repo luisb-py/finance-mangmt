@@ -66,6 +66,8 @@ let isLoadingRemoteData = false;
 let deferredInstallPrompt = null;
 let stripeCheckoutController = null;
 let stripeCheckoutRedirectTimer = null;
+let stripeCheckoutWatchdogTimer = null;
+let stripeCheckoutWindow = null;
 let stripeCheckoutLoading = false;
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -544,7 +546,11 @@ function bindPremiumModal() {
     if (event.key === "Escape") closePremiumModal();
   });
   window.addEventListener("pageshow", () => {
-    if (stripeCheckoutLoading) resetPremiumCheckoutState();
+    resetStalePremiumCheckout();
+  });
+  window.addEventListener("focus", resetStalePremiumCheckout);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") resetStalePremiumCheckout();
   });
 }
 
@@ -558,7 +564,11 @@ async function startStripeCheckout() {
   }
 
   stripeCheckoutController = new AbortController();
-  setPremiumCheckoutLoading(true, "Abrindo checkout seguro do Stripe...");
+  stripeCheckoutWindow = openStripeCheckoutWindow();
+  setPremiumCheckoutLoading(true, "Preparando checkout seguro do Stripe...");
+  stripeCheckoutWatchdogTimer = setTimeout(() => {
+    resetPremiumCheckoutState("O Stripe demorou para responder. Tente assinar novamente.");
+  }, 15000);
   try {
     const response = await fetch("/api/stripe/create-checkout-session", {
       method: "POST",
@@ -574,7 +584,17 @@ async function startStripeCheckout() {
     if (!response.ok) throw new Error(data.error || "Não foi possível abrir o checkout.");
     if (!data.url) throw new Error("Checkout sem URL de redirecionamento.");
 
+    if (stripeCheckoutWindow && !stripeCheckoutWindow.closed) {
+      const checkoutWindow = stripeCheckoutWindow;
+      stripeCheckoutWindow = null;
+      checkoutWindow.location.href = data.url;
+      resetPremiumCheckoutState("Checkout aberto em outra aba. Conclua por lá ou volte aqui para tentar novamente.");
+      return;
+    }
+
     note.textContent = "Redirecionando para o checkout seguro do Stripe...";
+    clearTimeout(stripeCheckoutWatchdogTimer);
+    stripeCheckoutWatchdogTimer = null;
     window.location.assign(data.url);
     stripeCheckoutRedirectTimer = setTimeout(() => {
       if (!document.hidden) resetPremiumCheckoutState("Se o checkout não abriu, tente novamente.");
@@ -583,6 +603,19 @@ async function startStripeCheckout() {
     if (error.name === "AbortError") return;
     resetPremiumCheckoutState(error.message || "Não foi possível abrir o checkout do Stripe.");
   }
+}
+
+function openStripeCheckoutWindow() {
+  const checkoutWindow = window.open("", "_blank");
+  if (!checkoutWindow) return null;
+  try {
+    checkoutWindow.document.title = "Abrindo Stripe...";
+    checkoutWindow.document.body.innerHTML = "<p style=\"font-family: system-ui; padding: 24px;\">Abrindo checkout seguro do Stripe...</p>";
+    checkoutWindow.opener = null;
+  } catch {
+    // Alguns navegadores restringem acesso à aba assim que ela é criada.
+  }
+  return checkoutWindow;
 }
 
 function setPremiumCheckoutLoading(isLoading, message) {
@@ -598,9 +631,20 @@ function resetPremiumCheckoutState(message = "Checkout seguro via Stripe. Você 
     stripeCheckoutController.abort();
     stripeCheckoutController = null;
   }
+  if (stripeCheckoutWindow && !stripeCheckoutWindow.closed) {
+    stripeCheckoutWindow.close();
+  }
+  stripeCheckoutWindow = null;
   clearTimeout(stripeCheckoutRedirectTimer);
+  clearTimeout(stripeCheckoutWatchdogTimer);
   stripeCheckoutRedirectTimer = null;
+  stripeCheckoutWatchdogTimer = null;
   setPremiumCheckoutLoading(false, message);
+}
+
+function resetStalePremiumCheckout() {
+  if (!stripeCheckoutLoading) return;
+  resetPremiumCheckoutState("Checkout seguro via Stripe. Você pode tentar novamente.");
 }
 
 function handleStripeReturn() {
