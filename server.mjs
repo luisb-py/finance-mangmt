@@ -8,6 +8,15 @@ await loadLocalEnv();
 const root = resolve(".");
 const port = Number(process.env.PORT || 4174);
 const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+const manualPremiumEmails = new Set(
+  [
+    "luisbaumel22@gmail.com",
+    ...(process.env.MANUAL_PREMIUM_EMAILS || "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ]
+);
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -322,7 +331,12 @@ async function handleGetAppState(request, response) {
     return;
   }
 
-  sendJson(response, 200, { data: data[0]?.data || null, updatedAt: data[0]?.updated_at || null });
+  const savedSubscription = data[0]?.data?.state?.subscription;
+  const appData = applyUserEntitlements(data[0]?.data || null, auth.user);
+  if (hasManualPremiumEntitlement(auth.user) && (savedSubscription?.plan !== "premium" || savedSubscription?.status !== "active")) {
+    updateUserSubscription(auth.user.id, "premium", "active").catch((error) => console.error(error));
+  }
+  sendJson(response, 200, { data: appData, updatedAt: data[0]?.updated_at || null });
 }
 
 async function handleSaveAppState(request, response) {
@@ -339,7 +353,8 @@ async function handleSaveAppState(request, response) {
   }
 
   const payload = await readJson(request);
-  const appData = payload.data && typeof payload.data === "object" ? payload.data : {};
+  const rawAppData = payload.data && typeof payload.data === "object" ? payload.data : {};
+  const appData = applyUserEntitlements(rawAppData, auth.user);
   const stateResponse = await fetch(`${supabaseUrl}/rest/v1/app_states`, {
     method: "POST",
     headers: {
@@ -562,6 +577,34 @@ async function updateUserSubscription(userId, plan, status, stripe = {}) {
       updated_at: new Date().toISOString(),
     }),
   });
+}
+
+function hasManualPremiumEntitlement(user) {
+  const email = String(user?.email || "").trim().toLowerCase();
+  return Boolean(email && manualPremiumEmails.has(email));
+}
+
+function applyUserEntitlements(appData, user) {
+  if (!hasManualPremiumEntitlement(user)) return appData;
+
+  const data = appData && typeof appData === "object"
+    ? JSON.parse(JSON.stringify(appData))
+    : { version: 1, state: {} };
+  data.version ||= 1;
+  data.state ||= {};
+  data.state.accounts ||= [];
+  data.state.cards ||= [];
+  data.state.transactions ||= [];
+  data.state.recurringTransactions ||= [];
+  data.state.subscription = {
+    ...(data.state.subscription || {}),
+    plan: "premium",
+    status: "active",
+    updatedAt: data.state.subscription?.updatedAt || new Date().toISOString(),
+    manualPremium: true,
+  };
+  data.savedAt ||= new Date().toISOString();
+  return data;
 }
 
 function verifyStripeSignature(rawBody, signatureHeader, secret) {

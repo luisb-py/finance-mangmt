@@ -64,6 +64,9 @@ let selectedInvoiceCardId = null;
 let remoteSaveTimer = null;
 let isLoadingRemoteData = false;
 let deferredInstallPrompt = null;
+let stripeCheckoutController = null;
+let stripeCheckoutRedirectTimer = null;
+let stripeCheckoutLoading = false;
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -506,6 +509,7 @@ function requirePremiumFeature(feature) {
 function openPremiumModal(feature) {
   const modal = document.getElementById("premiumModal");
   if (!modal) return;
+  resetPremiumCheckoutState();
   const data = PREMIUM_FEATURES[feature] || {
     title: "Função Premium",
     text: "Essa ferramenta faz parte do plano Premium de R$ 29,90/mês.",
@@ -521,6 +525,7 @@ function openPremiumModal(feature) {
 function closePremiumModal() {
   const modal = document.getElementById("premiumModal");
   if (!modal) return;
+  resetPremiumCheckoutState();
   modal.classList.remove("open");
   modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("has-modal-open");
@@ -538,19 +543,22 @@ function bindPremiumModal() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closePremiumModal();
   });
+  window.addEventListener("pageshow", () => {
+    if (stripeCheckoutLoading) resetPremiumCheckoutState();
+  });
 }
 
 async function startStripeCheckout() {
   const note = document.getElementById("premiumModalNote");
-  const button = document.getElementById("premiumSubscribeButton");
   const session = currentSession();
+  if (stripeCheckoutLoading) return;
   if (!session?.accessToken) {
     note.textContent = "Entre na sua conta antes de assinar o Premium.";
     return;
   }
 
-  note.textContent = "Abrindo checkout seguro do Stripe...";
-  button.disabled = true;
+  stripeCheckoutController = new AbortController();
+  setPremiumCheckoutLoading(true, "Abrindo checkout seguro do Stripe...");
   try {
     const response = await fetch("/api/stripe/create-checkout-session", {
       method: "POST",
@@ -559,14 +567,40 @@ async function startStripeCheckout() {
         authorization: `Bearer ${session.accessToken}`,
       },
       body: JSON.stringify({ plan: "premium" }),
+      signal: stripeCheckoutController.signal,
     });
+    stripeCheckoutController = null;
     const data = await readJsonResponse(response);
     if (!response.ok) throw new Error(data.error || "Não foi possível abrir o checkout.");
-    window.location.href = data.url;
+    if (!data.url) throw new Error("Checkout sem URL de redirecionamento.");
+
+    note.textContent = "Redirecionando para o checkout seguro do Stripe...";
+    window.location.assign(data.url);
+    stripeCheckoutRedirectTimer = setTimeout(() => {
+      if (!document.hidden) resetPremiumCheckoutState("Se o checkout não abriu, tente novamente.");
+    }, 5000);
   } catch (error) {
-    note.textContent = error.message || "Não foi possível abrir o checkout do Stripe.";
-    button.disabled = false;
+    if (error.name === "AbortError") return;
+    resetPremiumCheckoutState(error.message || "Não foi possível abrir o checkout do Stripe.");
   }
+}
+
+function setPremiumCheckoutLoading(isLoading, message) {
+  const note = document.getElementById("premiumModalNote");
+  const button = document.getElementById("premiumSubscribeButton");
+  stripeCheckoutLoading = isLoading;
+  if (note) note.textContent = message;
+  if (button) button.disabled = isLoading;
+}
+
+function resetPremiumCheckoutState(message = "Checkout seguro via Stripe. Você só confirma o pagamento na tela do Stripe.") {
+  if (stripeCheckoutController) {
+    stripeCheckoutController.abort();
+    stripeCheckoutController = null;
+  }
+  clearTimeout(stripeCheckoutRedirectTimer);
+  stripeCheckoutRedirectTimer = null;
+  setPremiumCheckoutLoading(false, message);
 }
 
 function handleStripeReturn() {
