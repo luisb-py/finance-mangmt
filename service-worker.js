@@ -1,8 +1,8 @@
-const CACHE_NAME = "finance-mangmt-v31";
+const CACHE_NAME = "finance-mangmt-v32";
 const CORE_ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=20",
+  "/styles.css?v=21",
   "/app.js?v=31",
   "/manifest.webmanifest",
   "/assets/logo-white.png",
