@@ -11,6 +11,7 @@ const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
 const manualPremiumEmails = new Set(
   [
     "luisbaumel22@gmail.com",
+    "luisbaumel@outlook.com",
     ...(process.env.MANUAL_PREMIUM_EMAILS || "")
       .split(",")
       .map((email) => email.trim().toLowerCase())
