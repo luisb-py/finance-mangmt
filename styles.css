@@ -2404,10 +2404,24 @@ button:hover [data-icon],
   }
 
   .calculator-widget,
-  .quick-entry-widget,
   #seedDemo,
   #clearData {
     display: none !important;
+  }
+
+  .quick-entry-widget {
+    right: 82px;
+    bottom: calc(102px + env(safe-area-inset-bottom));
+    z-index: 15;
+  }
+
+  .quick-entry-panel {
+    position: fixed;
+    inset: auto 14px calc(168px + env(safe-area-inset-bottom)) 14px;
+    width: auto;
+    max-height: min(74vh, 560px);
+    overflow: auto;
+    transform-origin: bottom center;
   }
 
   .ai-widget {
@@ -2513,6 +2527,49 @@ button:hover [data-icon],
   .ai-widget {
     right: 16px;
     bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+
+  .quick-entry-widget {
+    right: 82px;
+    bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+
+  .quick-entry-panel {
+    inset: auto 10px calc(150px + env(safe-area-inset-bottom)) 10px;
+    max-height: min(70vh, 520px);
+  }
+
+  .quick-entry-panel .ai-header {
+    padding: 12px 14px;
+  }
+
+  .quick-entry-panel .ai-header h2 {
+    font-size: 1.02rem;
+  }
+
+  .quick-entry-form {
+    display: grid;
+    gap: 10px;
+    padding: 12px 14px 16px;
+  }
+
+  .quick-entry-form .field-row {
+    gap: 9px;
+  }
+
+  .quick-entry-panel label {
+    gap: 5px;
+    font-size: 0.78rem;
+  }
+
+  .quick-entry-panel label input,
+  .quick-entry-panel label select {
+    min-height: 40px;
+    border-radius: 10px;
+  }
+
+  .quick-entry-panel .primary-button {
+    min-height: 44px;
   }
 
   .sidebar {

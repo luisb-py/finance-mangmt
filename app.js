@@ -565,7 +565,7 @@ async function startStripeCheckout() {
   }
 
   stripeCheckoutController = new AbortController();
-  stripeCheckoutWindow = openStripeCheckoutWindow();
+  stripeCheckoutWindow = shouldUseSameWindowCheckout() ? null : openStripeCheckoutWindow();
   setPremiumCheckoutLoading(true, "Preparando checkout seguro do Stripe...");
   stripeCheckoutWatchdogTimer = setTimeout(() => {
     resetPremiumCheckoutState("O Stripe demorou para responder. Tente assinar novamente.");
@@ -617,6 +617,13 @@ function openStripeCheckoutWindow() {
     // Alguns navegadores restringem acesso à aba assim que ela é criada.
   }
   return checkoutWindow;
+}
+
+function shouldUseSameWindowCheckout() {
+  const standalone = window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone;
+  const mobileLike = window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  return Boolean(standalone || mobileLike || iOS);
 }
 
 function setPremiumCheckoutLoading(isLoading, message) {
