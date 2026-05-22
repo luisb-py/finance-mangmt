@@ -97,7 +97,10 @@ createServer(async (request, response) => {
     }
 
     const file = await readFile(filePath);
-    response.writeHead(200, { "content-type": mime[extname(filePath)] || "application/octet-stream" });
+    response.writeHead(200, {
+      "content-type": mime[extname(filePath)] || "application/octet-stream",
+      ...cacheHeaders(pathname),
+    });
     response.end(file);
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -632,6 +635,17 @@ function appBaseUrl(request) {
   const protocol = request.headers["x-forwarded-proto"] || "https";
   const host = request.headers["x-forwarded-host"] || request.headers.host;
   return `${protocol}://${host}`;
+}
+
+function cacheHeaders(pathname) {
+  const extension = extname(pathname);
+  if (pathname === "/service-worker.js") {
+    return { "cache-control": "no-cache, no-store, must-revalidate" };
+  }
+  if (pathname === "/index.html" || [".html", ".js", ".css", ".webmanifest"].includes(extension)) {
+    return { "cache-control": "no-cache, must-revalidate" };
+  }
+  return { "cache-control": "public, max-age=604800" };
 }
 
 function supabaseConfig() {

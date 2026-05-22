@@ -69,6 +69,7 @@ let stripeCheckoutRedirectTimer = null;
 let stripeCheckoutWatchdogTimer = null;
 let stripeCheckoutWindow = null;
 let stripeCheckoutLoading = false;
+let serviceWorkerReloading = false;
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -952,7 +953,43 @@ function bindPwaInstall() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+  navigator.serviceWorker.addEventListener("controllerchange", reloadForServiceWorkerUpdate);
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "APP_UPDATED") {
+      reloadForServiceWorkerUpdate();
+    }
+  });
+
+  navigator.serviceWorker.register("/service-worker.js").then((registration) => {
+    const requestUpdate = () => registration.update().catch(() => {});
+
+    requestUpdate();
+    setInterval(requestUpdate, 15 * 60 * 1000);
+    window.addEventListener("focus", requestUpdate);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") requestUpdate();
+    });
+
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+
+    registration.addEventListener("updatefound", () => {
+      const nextWorker = registration.installing;
+      if (!nextWorker) return;
+      nextWorker.addEventListener("statechange", () => {
+        if (nextWorker.state === "installed" && navigator.serviceWorker.controller) {
+          nextWorker.postMessage({ type: "SKIP_WAITING" });
+        }
+      });
+    });
+  }).catch(() => {});
+}
+
+function reloadForServiceWorkerUpdate() {
+  if (serviceWorkerReloading) return;
+  serviceWorkerReloading = true;
+  window.location.reload();
 }
 
 function bindTableScroll() {

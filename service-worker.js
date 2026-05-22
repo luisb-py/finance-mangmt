@@ -1,29 +1,50 @@
-const CACHE_NAME = "finance-mangmt-v34";
+const CACHE_NAME = "finance-mangmt-v35";
 const CORE_ASSETS = [
   "/",
   "/index.html",
   "/styles.css?v=21",
-  "/app.js?v=33",
+  "/app.js?v=34",
   "/manifest.webmanifest",
   "/assets/logo-white.png",
   "/assets/logo-green-dark.png",
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)));
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(CORE_ASSETS))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    (async () => {
+      const keys = await caches.keys();
+      const oldKeys = keys.filter((key) => key !== CACHE_NAME);
+      await Promise.all(oldKeys.map((key) => caches.delete(key)));
+      await self.clients.claim();
+
+      if (oldKeys.length) {
+        const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        await Promise.all(clients.map((client) => {
+          client.postMessage({ type: "APP_UPDATED", cacheName: CACHE_NAME });
+          return "navigate" in client ? client.navigate(client.url).catch(() => null) : Promise.resolve();
+        }));
+      }
+    })()
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
   const requestUrl = new URL(event.request.url);
   if (requestUrl.pathname.startsWith("/api/")) return;
+
+  if (event.request.mode === "navigate" || isNetworkFirstRequest(requestUrl)) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
@@ -38,3 +59,31 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+function isNetworkFirstRequest(url) {
+  return url.pathname === "/"
+    || url.pathname.endsWith(".html")
+    || url.pathname.endsWith(".js")
+    || url.pathname.endsWith(".css")
+    || url.pathname.endsWith(".webmanifest");
+}
+
+async function networkFirst(request) {
+  const fallback = request.mode === "navigate" ? await caches.match("/index.html") : await caches.match(request);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return fallback || caches.match("/index.html");
+  }
+}
