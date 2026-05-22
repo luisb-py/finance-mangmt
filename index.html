@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=22" />
+    <link rel="stylesheet" href="styles.css?v=23" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -48,6 +48,53 @@
         </button>
         <p class="login-note" id="authStatus">Use seu cadastro do Supabase para acessar o painel.</p>
       </form>
+    </section>
+
+    <section class="onboarding-modal" id="onboardingModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+      <div class="onboarding-card">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Primeiro acesso</p>
+            <h2 id="onboardingTitle">Vamos calibrar seu painel</h2>
+          </div>
+          <button class="icon-button" id="skipOnboarding" type="button" title="Pular">
+            <span data-icon="close"></span>
+          </button>
+        </div>
+        <p class="onboarding-copy">Essas respostas ajudam a IA, as metas e os alertas a falarem com a sua realidade.</p>
+        <div class="field-row">
+          <label>
+            Como quer ser chamado
+            <input id="onboardingName" type="text" placeholder="Seu nome" autocomplete="name" />
+          </label>
+          <label>
+            Renda líquida mensal
+            <input id="onboardingIncome" type="number" min="0" step="50" placeholder="0,00" />
+          </label>
+        </div>
+        <label>
+          Principal objetivo financeiro
+          <input id="onboardingGoal" type="text" placeholder="Ex.: quitar dívidas, montar reserva, comprar um carro" />
+        </label>
+        <div class="field-row">
+          <label>
+            Perfil de risco
+            <select id="onboardingRisk">
+              <option value="conservador">Conservador</option>
+              <option value="moderado">Moderado</option>
+              <option value="arrojado">Arrojado</option>
+            </select>
+          </label>
+          <label>
+            Gasto fixo estimado
+            <input id="onboardingFixedCosts" type="number" min="0" step="50" placeholder="0,00" />
+          </label>
+        </div>
+        <button class="primary-button" id="finishOnboarding" type="button">
+          <span data-icon="check"></span>
+          Salvar e entrar
+        </button>
+      </div>
     </section>
 
     <aside class="sidebar">
@@ -206,6 +253,50 @@
           </article>
         </div>
 
+        <div class="dashboard-support-grid">
+          <section class="panel health-panel">
+            <div class="panel-header compact-header">
+              <div>
+                <p class="eyebrow">Saúde financeira</p>
+                <h2>Score do mês</h2>
+              </div>
+              <div class="health-score" id="financialScore">0</div>
+            </div>
+            <p class="health-status" id="healthStatus">Calcule seu mês com alguns lançamentos.</p>
+            <div class="list compact-list" id="healthInsights"></div>
+          </section>
+
+          <section class="panel notifications-panel">
+            <div class="panel-header compact-header">
+              <div>
+                <p class="eyebrow">Alertas inteligentes</p>
+                <h2>O que merece atenção</h2>
+              </div>
+            </div>
+            <div class="list compact-list" id="smartNotifications"></div>
+          </section>
+
+          <section class="panel goals-panel">
+            <div class="panel-header compact-header">
+              <div>
+                <p class="eyebrow">Metas</p>
+                <h2>Plano de progresso</h2>
+              </div>
+            </div>
+            <div class="goal-form">
+              <input id="goalName" type="text" placeholder="Nome da meta" />
+              <input id="goalTarget" type="number" min="0" step="50" placeholder="Alvo" />
+              <input id="goalCurrent" type="number" min="0" step="50" placeholder="Atual" />
+              <input id="goalDeadline" type="date" />
+              <button class="primary-button compact" id="saveGoal" type="button">
+                <span data-icon="plus"></span>
+                Meta
+              </button>
+            </div>
+            <div class="list compact-list" id="goalsList"></div>
+          </section>
+        </div>
+
         <div class="dashboard-grid">
           <section class="panel wide">
             <div class="panel-header">
@@ -361,6 +452,20 @@
               <select id="recurringSource"></select>
             </label>
 
+            <div class="field-row">
+              <label>
+                Status
+                <select id="recurringStatus">
+                  <option value="active">Ativa</option>
+                  <option value="paused">Pausada</option>
+                </select>
+              </label>
+              <label>
+                Reajuste mensal (%)
+                <input id="recurringAdjustment" type="number" step="0.1" value="0" />
+              </label>
+            </div>
+
             <button class="primary-button" type="submit">
               <span data-icon="calendar"></span>
               Criar recorrência
@@ -456,6 +561,28 @@
           </article>
         </div>
 
+        <section class="panel invoice-control-panel">
+          <div class="invoice-control-copy">
+            <p class="eyebrow">Controle de pagamento</p>
+            <h2>Status da fatura selecionada</h2>
+            <p id="invoiceStatus">Selecione um cartão para acompanhar pagamento e saldo restante.</p>
+          </div>
+          <div class="invoice-control-values">
+            <div>
+              <span>Pago</span>
+              <strong id="invoicePaidTotal">R$ 0,00</strong>
+            </div>
+            <div>
+              <span>Restante</span>
+              <strong id="invoiceRemainingTotal">R$ 0,00</strong>
+            </div>
+          </div>
+          <button class="primary-button" id="markInvoicePaid" type="button">
+            <span data-icon="check"></span>
+            Marcar como paga
+          </button>
+        </section>
+
         <div class="dashboard-grid">
           <section class="panel wide table-panel">
             <div class="panel-header">
@@ -488,6 +615,16 @@
               </div>
             </div>
             <div class="list" id="invoiceCardsSummary"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Parcelas futuras</p>
+                <h2>Próximos meses</h2>
+              </div>
+            </div>
+            <div class="list" id="futureInstallmentsList"></div>
           </section>
         </div>
       </section>
@@ -908,6 +1045,57 @@
             <p class="plan-limit-note" id="passwordStatus"></p>
           </form>
         </div>
+
+        <div class="work-grid two profile-extra-grid">
+          <section class="panel profile-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Assinatura</p>
+                <h2>Central Premium</h2>
+              </div>
+            </div>
+            <div class="subscription-grid">
+              <div>
+                <span>Plano</span>
+                <strong id="subscriptionPlanLabel">Plano Free</strong>
+              </div>
+              <div>
+                <span>Uso</span>
+                <strong id="subscriptionUsage">0 contas, 0 cartões</strong>
+              </div>
+            </div>
+            <button class="primary-button" id="openPremiumFromProfile" type="button">
+              <span data-icon="check"></span>
+              Ver Premium
+            </button>
+            <p class="plan-limit-note" id="subscriptionStatus">Premium libera limites ilimitados, IA avançada e exportações.</p>
+          </section>
+
+          <section class="panel profile-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Exportação</p>
+                <h2>Relatório completo <span class="premium-badge">Premium</span></h2>
+              </div>
+            </div>
+            <p class="profile-muted">Baixe um CSV com tudo que entrou, saiu, contas, cartões e origem de cada lançamento.</p>
+            <button class="secondary-button" id="exportCsv" type="button">
+              <span data-icon="download"></span>
+              Exportar dados <span class="premium-badge">Premium</span>
+            </button>
+            <p class="plan-limit-note" id="exportStatus"></p>
+          </section>
+
+          <section class="panel profile-panel admin-panel hidden" id="adminPanel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Admin</p>
+                <h2>Painel do dono</h2>
+              </div>
+            </div>
+            <div class="admin-grid" id="adminStats"></div>
+          </section>
+        </div>
       </section>
 
     </main>
@@ -1061,6 +1249,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=35"></script>
+    <script src="app.js?v=36"></script>
   </body>
 </html>

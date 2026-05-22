@@ -42,14 +42,21 @@ const PREMIUM_FEATURES = {
     title: "Planejador financeiro IA",
     text: "O planejador de decisões com IA especialista faz parte do Premium.",
   },
+  export: {
+    title: "Exportação completa",
+    text: "A exportação de todos os movimentos e saldos faz parte do Premium.",
+  },
 };
 
 const initialState = {
   subscription: defaultSubscription(),
+  profileSettings: defaultProfileSettings(),
   accounts: [],
   cards: [],
   transactions: [],
   recurringTransactions: [],
+  goals: [],
+  invoicePayments: [],
 };
 
 let state = loadState();
@@ -231,7 +238,7 @@ function getInvestmentProfileFromUiOrStorage() {
 
 function hasLocalAppData() {
   const profile = storedInvestmentProfile();
-  return Boolean(state.accounts.length || state.cards.length || state.transactions.length || Object.keys(profile).length);
+  return Boolean(state.accounts.length || state.cards.length || state.transactions.length || state.goals?.length || Object.keys(profile).length);
 }
 
 async function loadRemoteAppData() {
@@ -325,10 +332,13 @@ async function saveRemoteAppData() {
 function normalizeState(value) {
   return {
     subscription: normalizeSubscription(value?.subscription),
+    profileSettings: normalizeProfileSettings(value?.profileSettings),
     accounts: Array.isArray(value?.accounts) ? value.accounts : [],
     cards: Array.isArray(value?.cards) ? value.cards : [],
     transactions: Array.isArray(value?.transactions) ? value.transactions : [],
     recurringTransactions: Array.isArray(value?.recurringTransactions) ? value.recurringTransactions : [],
+    goals: Array.isArray(value?.goals) ? value.goals.map(normalizeGoal).filter(Boolean) : [],
+    invoicePayments: Array.isArray(value?.invoicePayments) ? value.invoicePayments.map(normalizeInvoicePayment).filter(Boolean) : [],
   };
 }
 
@@ -337,6 +347,51 @@ function defaultSubscription() {
     plan: "free",
     status: "active",
     updatedAt: null,
+  };
+}
+
+function defaultProfileSettings() {
+  return {
+    onboardingCompleted: false,
+    monthlyIncome: 0,
+    mainGoal: "",
+    riskProfile: "conservador",
+    fixedCosts: 0,
+  };
+}
+
+function normalizeProfileSettings(value = {}) {
+  const defaults = defaultProfileSettings();
+  return {
+    onboardingCompleted: Boolean(value?.onboardingCompleted),
+    monthlyIncome: Number(value?.monthlyIncome || 0),
+    mainGoal: String(value?.mainGoal || defaults.mainGoal),
+    riskProfile: ["conservador", "moderado", "arrojado"].includes(value?.riskProfile) ? value.riskProfile : defaults.riskProfile,
+    fixedCosts: Number(value?.fixedCosts || 0),
+  };
+}
+
+function normalizeGoal(goal = {}) {
+  const name = String(goal.name || "").trim();
+  if (!name) return null;
+  return {
+    id: goal.id || makeId(),
+    name,
+    target: Number(goal.target || 0),
+    current: Number(goal.current || 0),
+    deadline: String(goal.deadline || ""),
+    createdAt: goal.createdAt || new Date().toISOString(),
+  };
+}
+
+function normalizeInvoicePayment(payment = {}) {
+  if (!payment.cardId || !payment.month) return null;
+  return {
+    id: payment.id || makeId(),
+    cardId: payment.cardId,
+    month: payment.month,
+    amount: Number(payment.amount || 0),
+    paidAt: payment.paidAt || new Date().toISOString(),
   };
 }
 
@@ -730,6 +785,15 @@ function bindForms() {
     event.preventDefault();
     updateProfilePassword();
   });
+  document.getElementById("finishOnboarding")?.addEventListener("click", finishOnboarding);
+  document.getElementById("skipOnboarding")?.addEventListener("click", () => {
+    state.profileSettings = { ...normalizeProfileSettings(state.profileSettings), onboardingCompleted: true };
+    persistAndRender();
+  });
+  document.getElementById("saveGoal")?.addEventListener("click", saveGoal);
+  document.getElementById("markInvoicePaid")?.addEventListener("click", markSelectedInvoicePaid);
+  document.getElementById("openPremiumFromProfile")?.addEventListener("click", () => openPremiumModal("export"));
+  document.getElementById("exportCsv")?.addEventListener("click", exportAllData);
 
   document.getElementById("accountForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -802,6 +866,8 @@ function bindForms() {
       sourceType,
       sourceId,
       frequency: "monthly",
+      status: getValue("recurringStatus") || "active",
+      adjustment: Number(getValue("recurringAdjustment") || 0),
       months: Math.min(60, Math.max(1, Number(getValue("recurringMonths") || 12))),
       createdAt: new Date().toISOString(),
     };
@@ -810,6 +876,9 @@ function bindForms() {
     state.recurringTransactions.push(recurring);
     state.transactions.push(...recurringEntries);
     event.target.reset();
+    document.getElementById("recurringMonths").value = 12;
+    document.getElementById("recurringStatus").value = "active";
+    document.getElementById("recurringAdjustment").value = 0;
     setDefaultDate();
     persistAndRender();
   });
@@ -824,7 +893,7 @@ function bindForms() {
   document.getElementById("dashboardCardFilter").addEventListener("change", renderDashboard);
 
   document.getElementById("seedDemo").addEventListener("click", () => {
-    state = demoState();
+    state = normalizeState(demoState());
     resetTransactionForm();
     resetCardForm();
     persistAndRender();
@@ -1310,6 +1379,11 @@ function buildAiContext() {
     stats,
     subscription: currentSubscription(),
     planLimits: currentPlanLimits(),
+    profileSettings: normalizeProfileSettings(state.profileSettings),
+    goals: state.goals || [],
+    invoicePayments: state.invoicePayments || [],
+    financialHealth: financialHealthSnapshot(),
+    notifications: smartNotifications(),
     investmentProfile: getInvestmentProfile(),
     decisionContext: document.getElementById("decisionType") ? getDecisionContext() : null,
     plannerSnapshot: plannerSnapshot(),
@@ -1859,6 +1933,7 @@ function syncLoginState() {
   if (!session) setSyncStatus("local");
   updateGreeting();
   renderProfile();
+  renderOnboarding();
 }
 
 function setDefaultDate() {
@@ -1892,6 +1967,7 @@ function scheduleDashboardRender() {
 function render() {
   renderPlanState();
   renderPlanUsage();
+  renderOnboarding();
   renderProfile();
   ensureRecurringTransactions();
   renderSourceOptions();
@@ -1926,6 +2002,243 @@ function renderProfile() {
   if (profileSyncStatus) {
     profileSyncStatus.textContent = session?.accessToken ? "Conta conectada ao Supabase" : "Acesso local";
   }
+  renderSubscriptionCenter();
+  renderAdminPanel();
+}
+
+function renderOnboarding() {
+  const modal = document.getElementById("onboardingModal");
+  if (!modal) return;
+  const settings = normalizeProfileSettings(state.profileSettings);
+  const shouldShow = Boolean(currentSession() && !settings.onboardingCompleted);
+  modal.classList.toggle("open", shouldShow);
+  modal.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+  if (shouldShow) {
+    document.body.classList.add("has-modal-open");
+  } else if (!document.getElementById("premiumModal")?.classList.contains("open")) {
+    document.body.classList.remove("has-modal-open");
+  }
+  if (!shouldShow) return;
+
+  const session = currentSession();
+  const nameInput = document.getElementById("onboardingName");
+  if (nameInput && !nameInput.value) nameInput.value = preferredName(session);
+  const incomeInput = document.getElementById("onboardingIncome");
+  if (incomeInput && !incomeInput.value && settings.monthlyIncome) incomeInput.value = settings.monthlyIncome;
+  const goalInput = document.getElementById("onboardingGoal");
+  if (goalInput && !goalInput.value) goalInput.value = settings.mainGoal;
+}
+
+function finishOnboarding() {
+  const name = getValue("onboardingName");
+  const monthlyIncome = Number(getValue("onboardingIncome") || 0);
+  const mainGoal = getValue("onboardingGoal");
+  const riskProfile = getValue("onboardingRisk") || "conservador";
+  const fixedCosts = Number(getValue("onboardingFixedCosts") || 0);
+
+  state.profileSettings = normalizeProfileSettings({
+    onboardingCompleted: true,
+    monthlyIncome,
+    mainGoal,
+    riskProfile,
+    fixedCosts,
+  });
+
+  if (name.length >= 2) {
+    updateSession({ name });
+    const session = currentSession();
+    if (session?.accessToken) {
+      fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${session.accessToken}`,
+        },
+        body: JSON.stringify({ username: name }),
+      }).catch(() => null);
+    }
+  }
+
+  persistAndRender();
+}
+
+function renderSubscriptionCenter() {
+  const limits = currentPlanLimits();
+  setText("subscriptionPlanLabel", PLAN_LABELS[currentPlan()]);
+  setText(
+    "subscriptionUsage",
+    `${state.accounts.length}/${formatLimitValue(limits.accounts)} contas, ${state.cards.length}/${formatLimitValue(limits.cards)} cartões`
+  );
+  const status = document.getElementById("subscriptionStatus");
+  if (status) {
+    status.textContent = isPremium()
+      ? "Premium ativo: limites ilimitados, IA avançada, importação e exportação liberadas."
+      : "Free: 1 conta, 2 cartões e 100 lançamentos por mês.";
+  }
+  const button = document.getElementById("openPremiumFromProfile");
+  if (button) {
+    button.innerHTML = `<span data-icon="check"></span>${isPremium() ? "Premium ativo" : "Assinar Premium"}`;
+    hydrateIcons(button);
+  }
+}
+
+function renderAdminPanel() {
+  const panel = document.getElementById("adminPanel");
+  const stats = document.getElementById("adminStats");
+  if (!panel || !stats) return;
+  const session = currentSession();
+  const isOwner = String(session?.email || "").toLowerCase() === "luisbaumel22@gmail.com";
+  panel.classList.toggle("hidden", !isOwner);
+  if (!isOwner) return;
+
+  const monthlyTransactions = state.transactions.filter((transaction) => transaction.date.startsWith(new Date().toISOString().slice(0, 7))).length;
+  stats.innerHTML = [
+    ["Usuario", session?.email || "Local"],
+    ["Plano", PLAN_LABELS[currentPlan()]],
+    ["Contas", state.accounts.length],
+    ["Cartões", state.cards.length],
+    ["Lançamentos no mês", monthlyTransactions],
+    ["Receita estimada", isPremium() ? "R$ 29,90/mês" : "R$ 0,00"],
+  ].map(([label, value]) => `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `).join("");
+}
+
+function saveGoal() {
+  const name = getValue("goalName");
+  const target = Number(getValue("goalTarget") || 0);
+  if (!name || target <= 0) {
+    alert("Informe o nome da meta e um alvo maior que zero.");
+    return;
+  }
+  state.goals.push(normalizeGoal({
+    name,
+    target,
+    current: Number(getValue("goalCurrent") || 0),
+    deadline: getValue("goalDeadline"),
+  }));
+  ["goalName", "goalTarget", "goalCurrent", "goalDeadline"].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.value = "";
+  });
+  persistAndRender();
+}
+
+function renderGoals() {
+  const goals = [...(state.goals || [])].sort((a, b) => String(a.deadline || "9999").localeCompare(String(b.deadline || "9999")));
+  renderCollection("goalsList", goals, (goal) => {
+    const percent = goal.target > 0 ? Math.min(100, Math.round((goal.current / goal.target) * 100)) : 0;
+    return `
+      <div class="list-item compact-list-item">
+        <div class="list-row">
+          <strong>${escapeHtml(goal.name)}</strong>
+          <button class="delete-button" data-delete-goal="${goal.id}" title="Excluir meta"><span data-icon="trash"></span></button>
+        </div>
+        <div class="list-row subtle">
+          <span>${money.format(goal.current)} de ${money.format(goal.target)}</span>
+          <span>${goal.deadline ? formatDate(goal.deadline) : "Sem prazo"}</span>
+        </div>
+        <div class="progress"><span style="width: ${percent}%"></span></div>
+      </div>
+    `;
+  });
+  document.querySelectorAll("[data-delete-goal]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.goals = state.goals.filter((goal) => goal.id !== button.dataset.deleteGoal);
+      persistAndRender();
+    });
+  });
+}
+
+function renderFinancialHealth() {
+  const health = financialHealthSnapshot();
+  setText("financialScore", health.score);
+  setText("healthStatus", health.status);
+  const score = document.getElementById("financialScore");
+  if (score) score.dataset.tone = health.tone;
+  renderCollection("healthInsights", health.insights, (item) => `
+    <div class="list-item compact-list-item">
+      <div class="list-row">
+        <strong>${escapeHtml(item.title)}</strong>
+      </div>
+      <div class="list-row subtle"><span>${escapeHtml(item.text)}</span></div>
+    </div>
+  `);
+}
+
+function financialHealthSnapshot() {
+  const stats = financialStats();
+  const diagnostics = buildFinancialDiagnostics(stats);
+  const topShare = stats.expense && stats.topCategory ? (stats.topCategory.value / stats.expense) * 100 : 0;
+  let score = 100;
+  if (stats.income <= 0) score -= 18;
+  if (stats.net < 0) score -= 28;
+  if (diagnostics.cardPressure > 35) score -= 20;
+  else if (diagnostics.cardPressure > 20) score -= 10;
+  if (diagnostics.reserveMonths < 3) score -= 18;
+  else if (diagnostics.reserveMonths < 6) score -= 8;
+  if (topShare > 45) score -= 8;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  const tone = score >= 80 ? "good" : score >= 55 ? "warn" : "danger";
+  const status = score >= 80
+    ? "Boa margem para manter consistencia."
+    : score >= 55
+      ? "Mês pede atenção antes de assumir novos compromissos."
+      : "Fluxo pressionado. Priorize reduzir gastos e proteger reserva.";
+  const insights = [
+    {
+      title: "Resultado do mês",
+      text: `${money.format(stats.net)} de diferença entre entradas e saídas.`,
+    },
+    {
+      title: "Pressão do cartão",
+      text: `${diagnostics.cardPressure.toFixed(1)}% da renda aparece em faturas abertas.`,
+    },
+    {
+      title: "Reserva estimada",
+      text: `${diagnostics.reserveMonths.toFixed(1)} meses de gastos cobertos pelo saldo das contas.`,
+    },
+  ];
+  return { score, tone, status, insights };
+}
+
+function renderSmartNotifications() {
+  renderCollection("smartNotifications", smartNotifications(), (item) => `
+    <div class="list-item compact-list-item notification-item ${item.type}">
+      <div class="list-row">
+        <strong>${escapeHtml(item.title)}</strong>
+      </div>
+      <div class="list-row subtle"><span>${escapeHtml(item.text)}</span></div>
+    </div>
+  `);
+}
+
+function smartNotifications() {
+  const stats = financialStats();
+  const diagnostics = buildFinancialDiagnostics(stats);
+  const items = [];
+  if (!state.transactions.length) {
+    items.push({ type: "info", title: "Comece pelos lançamentos", text: "Cadastre entradas e saídas para liberar alertas mais precisos." });
+    return items;
+  }
+  if (stats.net < 0) {
+    items.push({ type: "danger", title: "Mês negativo", text: `Seu resultado está em ${money.format(stats.net)}. Revise gastos variáveis antes de novas parcelas.` });
+  }
+  if (diagnostics.cardPressure > 35) {
+    items.push({ type: "danger", title: "Cartão pesado", text: `Faturas abertas representam ${diagnostics.cardPressure.toFixed(1)}% das entradas do mês.` });
+  } else if (diagnostics.cardPressure > 20) {
+    items.push({ type: "warn", title: "Cartão em atenção", text: "A fatura ainda está administrável, mas já merece limite para novas compras." });
+  }
+  if (stats.topCategory) {
+    items.push({ type: "info", title: "Maior categoria", text: `${stats.topCategory.name} concentrou ${money.format(stats.topCategory.value)} neste mês.` });
+  }
+  if (diagnostics.reserveMonths < 3) {
+    items.push({ type: "warn", title: "Reserva curta", text: "A reserva estimada está abaixo de 3 meses de gastos. Priorize construir folga." });
+  }
+  return items.slice(0, 4);
 }
 
 function renderDashboardCardFilter() {
@@ -2030,6 +2343,9 @@ function renderDashboard() {
   setText("mobileNetBalance", money.format(income - expense));
 
   renderSummaryLists();
+  renderFinancialHealth();
+  renderSmartNotifications();
+  renderGoals();
   if (!isDashboardVisible()) return;
 
   renderCashflowChart(dashboardTransactions);
@@ -2101,6 +2417,8 @@ function syncTransactionsTableScroll() {
 function renderRecurringList() {
   renderCollection("recurringList", state.recurringTransactions || [], (recurring) => {
     const sourceLabel = recurring.sourceType === "card" ? `Cartão: ${cardName(recurring.sourceId)}` : `Conta: ${accountName(recurring.sourceId)}`;
+    const isPaused = recurring.status === "paused";
+    const adjustment = Number(recurring.adjustment || 0);
     return `
       <div class="list-item">
         <div class="list-row">
@@ -2109,10 +2427,10 @@ function renderRecurringList() {
         </div>
         <div class="list-row subtle">
           <span>${escapeHtml(recurring.category)} • ${escapeHtml(sourceLabel)}</span>
-          <span>${recurring.months} meses</span>
+          <span>${recurring.months} meses${adjustment ? ` • ${adjustment}%/mês` : ""}</span>
         </div>
         <div class="list-row subtle">
-          <span>Desde ${formatDate(recurring.startDate)}</span>
+          <span>${isPaused ? "Pausada" : "Ativa"} desde ${formatDate(recurring.startDate)}</span>
           <button class="delete-button" data-delete-recurring="${recurring.id}" title="Excluir recorrência"><span data-icon="trash"></span></button>
         </div>
       </div>
@@ -2144,11 +2462,29 @@ function renderInvoices() {
   const expenses = sum(transactions.filter((transaction) => transaction.type === "expense"));
   const credits = sum(transactions.filter((transaction) => transaction.type === "income"));
   const total = Math.max(0, expenses - credits);
+  const paid = getInvoicePayment(cardId, month)?.amount || 0;
+  const remaining = Math.max(0, total - paid);
 
   setText("invoiceTotal", money.format(total));
   setText("invoiceExpenses", money.format(expenses));
   setText("invoiceCredits", money.format(credits));
   setText("invoiceDueDate", card ? invoiceDueDate(month, card.closeDay) : "--");
+  setText("invoicePaidTotal", money.format(Math.min(paid, total)));
+  setText("invoiceRemainingTotal", money.format(remaining));
+  setText(
+    "invoiceStatus",
+    card
+      ? remaining <= 0 && total > 0
+        ? `Fatura ${formatMonth(month)} do ${card.name} marcada como paga.`
+        : `Fatura ${formatMonth(month)} do ${card.name} ainda tem ${money.format(remaining)} em aberto.`
+      : "Cadastre um cartão para acompanhar faturas."
+  );
+  const markPaidButton = document.getElementById("markInvoicePaid");
+  if (markPaidButton) {
+    markPaidButton.disabled = !card || total <= 0 || remaining <= 0;
+    markPaidButton.innerHTML = `<span data-icon="check"></span>${remaining <= 0 && total > 0 ? "Fatura paga" : "Marcar como paga"}`;
+    hydrateIcons(markPaidButton);
+  }
 
   const table = document.getElementById("invoiceTransactionsTable");
   if (table) {
@@ -2191,6 +2527,100 @@ function renderInvoices() {
       renderInvoices();
     });
   });
+  renderFutureInstallments(cardId, month);
+}
+
+function selectedInvoiceSummary() {
+  const month = document.getElementById("invoiceMonthFilter")?.value || new Date().toISOString().slice(0, 7);
+  const cardId = selectedInvoiceCardId || state.cards[0]?.id || "";
+  const transactions = state.transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId && transaction.date.startsWith(month));
+  const total = Math.max(0, sum(transactions.filter((transaction) => transaction.type === "expense")) - sum(transactions.filter((transaction) => transaction.type === "income")));
+  return { month, cardId, total };
+}
+
+function getInvoicePayment(cardId, month) {
+  return (state.invoicePayments || []).find((payment) => payment.cardId === cardId && payment.month === month);
+}
+
+function markSelectedInvoicePaid() {
+  const { cardId, month, total } = selectedInvoiceSummary();
+  if (!cardId || total <= 0) return;
+  const existing = getInvoicePayment(cardId, month);
+  if (existing) {
+    existing.amount = total;
+    existing.paidAt = new Date().toISOString();
+  } else {
+    state.invoicePayments.push({
+      id: makeId(),
+      cardId,
+      month,
+      amount: total,
+      paidAt: new Date().toISOString(),
+    });
+  }
+  persistAndRender();
+}
+
+function renderFutureInstallments(cardId, month) {
+  const future = state.transactions
+    .filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId && transaction.type === "expense")
+    .filter((transaction) => transaction.installmentGroupId && transaction.date.slice(0, 7) > month)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 8);
+
+  renderCollection("futureInstallmentsList", future, (transaction) => `
+    <div class="list-item compact-list-item">
+      <div class="list-row">
+        <strong>${escapeHtml(transaction.description)}</strong>
+        <span>${money.format(transaction.amount)}</span>
+      </div>
+      <div class="list-row subtle">
+        <span>${formatMonth(transaction.date.slice(0, 7))}</span>
+        <span>${transaction.installmentIndex}/${transaction.installmentCount}</span>
+      </div>
+    </div>
+  `);
+}
+
+function exportAllData() {
+  if (!requirePremiumFeature("export")) return;
+  const rows = [
+    ["tipo", "data", "descrição", "categoria", "origem", "entrada", "saída", "cartão", "conta", "parcelas"],
+    ...state.transactions
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((transaction) => [
+        "lançamento",
+        transaction.date,
+        transaction.description,
+        transaction.category,
+        sourceName(transaction),
+        transaction.type === "income" ? transaction.amount : "",
+        transaction.type === "expense" ? transaction.amount : "",
+        transaction.sourceType === "card" ? cardName(transaction.sourceId) : "",
+        transaction.sourceType === "account" ? accountName(transaction.sourceId) : "",
+        transaction.installmentCount ? `${transaction.installmentIndex}/${transaction.installmentCount}` : "",
+      ]),
+  ];
+  const totals = financialStats();
+  rows.push([]);
+  rows.push(["resumo", "", "Entradas", "", "", totals.income, "", "", "", ""]);
+  rows.push(["resumo", "", "Saidas", "", "", "", totals.expense, "", "", ""]);
+  rows.push(["resumo", "", "Resultado", "", "", totals.net, "", "", "", ""]);
+
+  const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `financas-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+  setProfileStatus("exportStatus", "Exportação gerada com sucesso.");
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
 function renderAccountsAndCards() {
@@ -2279,6 +2709,7 @@ function bindDeleteButtons() {
       state.cards = state.cards.filter((card) => card.id !== button.dataset.deleteCard);
       state.transactions = state.transactions.filter((transaction) => transaction.sourceId !== button.dataset.deleteCard);
       state.recurringTransactions = state.recurringTransactions.filter((recurring) => recurring.sourceId !== button.dataset.deleteCard);
+      state.invoicePayments = state.invoicePayments.filter((payment) => payment.cardId !== button.dataset.deleteCard);
       persistAndRender();
     });
   });
@@ -3002,18 +3433,21 @@ function generateRecurringTransactions(recurring) {
 }
 
 function buildRecurringTransactionEntries(recurring) {
+  if (recurring.status === "paused") return [];
   const months = Math.min(60, Math.max(1, Number(recurring.months || 12)));
+  const adjustment = Number(recurring.adjustment || 0) / 100;
   const entries = [];
   for (let index = 0; index < months; index += 1) {
     const date = addMonths(recurring.startDate, index);
     const recurringKey = `${recurring.id}:${date.slice(0, 7)}`;
     const exists = state.transactions.some((transaction) => transaction.recurringKey === recurringKey);
     if (exists) continue;
+    const adjustedAmount = Number((Number(recurring.amount || 0) * Math.pow(1 + adjustment, index)).toFixed(2));
     entries.push({
       id: makeId(),
       description: recurring.description,
       type: recurring.type,
-      amount: Number(recurring.amount || 0),
+      amount: adjustedAmount,
       date,
       category: recurring.category,
       sourceType: recurring.sourceType,
@@ -3177,6 +3611,13 @@ function demoState() {
   const premium = isPremium();
   return {
     subscription: currentSubscription(),
+    profileSettings: {
+      ...normalizeProfileSettings(state.profileSettings),
+      onboardingCompleted: true,
+      monthlyIncome: 6200,
+      mainGoal: "Montar reserva e controlar fatura",
+      fixedCosts: 2600,
+    },
     accounts: [
       { id: accountA, name: "Conta principal", initialBalance: 3200 },
       ...(premium ? [{ id: accountB, name: "Reserva", initialBalance: 8500 }] : []),
@@ -3194,5 +3635,10 @@ function demoState() {
       { id: makeId(), description: "Restaurante", type: "expense", amount: 186.5, date: `${month}-15`, category: "Lazer", sourceType: "card", sourceId: cardA },
       { id: makeId(), description: "Passagens", type: "expense", amount: 1340, date: `${month}-18`, category: "Viagem", sourceType: "card", sourceId: cardB },
     ],
+    recurringTransactions: [],
+    goals: [
+      { id: makeId(), name: "Reserva de emergencia", target: 12000, current: 3200, deadline: `${new Date().getFullYear()}-12-31` },
+    ],
+    invoicePayments: [],
   };
 }
