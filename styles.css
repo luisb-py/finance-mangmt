@@ -1735,6 +1735,32 @@ label {
   font-size: 0.8rem;
 }
 
+.invoice-payment-card {
+  border-color: color-mix(in srgb, var(--green) 36%, var(--line));
+}
+
+.invoice-payment-preview {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  padding: 14px;
+}
+
+.invoice-payment-preview span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.invoice-payment-preview strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 1.3rem;
+}
+
 .ai-header,
 .ai-input-row {
   display: flex;

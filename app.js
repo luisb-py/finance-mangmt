@@ -68,6 +68,7 @@ let authMode = "login";
 let editingCardId = null;
 let editingTransaction = null;
 let selectedInvoiceCardId = null;
+let pendingInvoicePayment = null;
 let remoteSaveTimer = null;
 let isLoadingRemoteData = false;
 let deferredInstallPrompt = null;
@@ -391,6 +392,8 @@ function normalizeInvoicePayment(payment = {}) {
     cardId: payment.cardId,
     month: payment.month,
     amount: Number(payment.amount || 0),
+    accountId: payment.accountId || null,
+    transactionId: payment.transactionId || null,
     paidAt: payment.paidAt || new Date().toISOString(),
   };
 }
@@ -791,7 +794,13 @@ function bindForms() {
     persistAndRender();
   });
   document.getElementById("saveGoal")?.addEventListener("click", saveGoal);
-  document.getElementById("markInvoicePaid")?.addEventListener("click", markSelectedInvoicePaid);
+  document.getElementById("markInvoicePaid")?.addEventListener("click", openInvoicePaymentModal);
+  document.getElementById("confirmInvoicePayment")?.addEventListener("click", confirmInvoicePayment);
+  document.getElementById("closeInvoicePaymentModal")?.addEventListener("click", closeInvoicePaymentModal);
+  document.getElementById("cancelInvoicePayment")?.addEventListener("click", closeInvoicePaymentModal);
+  document.querySelectorAll("[data-close-invoice-payment-modal]").forEach((item) => {
+    item.addEventListener("click", closeInvoicePaymentModal);
+  });
   document.getElementById("openPremiumFromProfile")?.addEventListener("click", () => openPremiumModal("export"));
   document.getElementById("exportCsv")?.addEventListener("click", exportAllData);
 
@@ -1436,7 +1445,7 @@ function buildFinancialDiagnostics(stats) {
 
 function categoryBreakdown() {
   const month = document.getElementById("monthFilter")?.value || new Date().toISOString().slice(0, 7);
-  const expenses = state.transactions.filter((transaction) => transaction.date.startsWith(month) && transaction.type === "expense");
+  const expenses = reportableTransactions(state.transactions).filter((transaction) => transaction.date.startsWith(month) && transaction.type === "expense");
   const total = sum(expenses);
   return Object.entries(
     expenses.reduce((acc, transaction) => {
@@ -1453,7 +1462,7 @@ function categoryBreakdown() {
 }
 
 function monthlyTrend() {
-  const groups = state.transactions.reduce((acc, transaction) => {
+  const groups = reportableTransactions(state.transactions).reduce((acc, transaction) => {
     const month = transaction.date.slice(0, 7);
     acc[month] ||= { month, income: 0, expense: 0, net: 0 };
     acc[month][transaction.type === "income" ? "income" : "expense"] += transaction.amount;
@@ -2326,9 +2335,9 @@ function renderDashboard() {
   const month = document.getElementById("monthFilter").value;
   const selectedCard = document.getElementById("dashboardCardFilter")?.value || "all";
   const transactions = state.transactions.filter((transaction) => transaction.date.startsWith(month));
-  const dashboardTransactions = selectedCard === "all"
+  const dashboardTransactions = reportableTransactions(selectedCard === "all"
     ? transactions
-    : transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === selectedCard);
+    : transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === selectedCard));
   const income = sum(dashboardTransactions.filter((item) => item.type === "income"));
   const expense = sum(dashboardTransactions.filter((item) => item.type === "expense"));
   const cardOpenTotal = calculateCardOpenTotal(dashboardTransactions);
@@ -2364,10 +2373,11 @@ function renderTransactions() {
       const amountClass = transaction.type === "income" ? "amount-income" : "amount-expense";
       const sign = transaction.type === "income" ? "+" : "-";
       const installmentLabel = transaction.installmentCount > 1 ? ` <span class="installment-badge">${transaction.installmentIndex}/${transaction.installmentCount}</span>` : "";
+      const invoicePaymentLabel = transaction.isInvoicePayment ? ` <span class="installment-badge">Fatura paga</span>` : "";
       return `
         <tr>
           <td>${formatDate(transaction.date)}</td>
-          <td>${escapeHtml(transaction.description)}${installmentLabel}</td>
+          <td>${escapeHtml(transaction.description)}${installmentLabel}${invoicePaymentLabel}</td>
           <td>${escapeHtml(transaction.category)}</td>
           <td>${escapeHtml(sourceName(transaction))}</td>
           <td class="${amountClass}">${sign} ${money.format(transaction.amount)}</td>
@@ -2391,6 +2401,13 @@ function renderTransactions() {
   table.querySelectorAll("[data-delete-transaction]").forEach((button) => {
     button.addEventListener("click", () => {
       const transaction = state.transactions.find((item) => item.id === button.dataset.deleteTransaction);
+      if (transaction?.isInvoicePayment) {
+        if (!confirm("Excluir este pagamento de fatura e reabrir a fatura?")) return;
+        state.transactions = state.transactions.filter((item) => item.id !== transaction.id);
+        state.invoicePayments = state.invoicePayments.filter((payment) => payment.transactionId !== transaction.id);
+        persistAndRender();
+        return;
+      }
       if (transaction?.installmentGroupId && transaction.installmentCount > 1) {
         const message = `Excluir todas as ${transaction.installmentCount} parcelas desta compra?`;
         if (!confirm(message)) return;
@@ -2462,8 +2479,10 @@ function renderInvoices() {
   const expenses = sum(transactions.filter((transaction) => transaction.type === "expense"));
   const credits = sum(transactions.filter((transaction) => transaction.type === "income"));
   const total = Math.max(0, expenses - credits);
-  const paid = getInvoicePayment(cardId, month)?.amount || 0;
+  const payment = getInvoicePayment(cardId, month);
+  const paid = payment?.amount || 0;
   const remaining = Math.max(0, total - paid);
+  const needsLinkedPayment = total > 0 && paid >= total && !payment?.transactionId;
 
   setText("invoiceTotal", money.format(total));
   setText("invoiceExpenses", money.format(expenses));
@@ -2474,15 +2493,18 @@ function renderInvoices() {
   setText(
     "invoiceStatus",
     card
-      ? remaining <= 0 && total > 0
+      ? needsLinkedPayment
+        ? `Fatura ${formatMonth(month)} do ${card.name} marcada como paga. Selecione uma conta para abater o saldo.`
+        : remaining <= 0 && total > 0
         ? `Fatura ${formatMonth(month)} do ${card.name} marcada como paga.`
         : `Fatura ${formatMonth(month)} do ${card.name} ainda tem ${money.format(remaining)} em aberto.`
       : "Cadastre um cartão para acompanhar faturas."
   );
   const markPaidButton = document.getElementById("markInvoicePaid");
   if (markPaidButton) {
-    markPaidButton.disabled = !card || total <= 0 || remaining <= 0;
-    markPaidButton.innerHTML = `<span data-icon="check"></span>${remaining <= 0 && total > 0 ? "Fatura paga" : "Marcar como paga"}`;
+    const canRegisterPayment = Boolean(card && total > 0 && (remaining > 0 || needsLinkedPayment));
+    markPaidButton.disabled = !canRegisterPayment;
+    markPaidButton.innerHTML = `<span data-icon="check"></span>${needsLinkedPayment ? "Registrar pagamento" : remaining <= 0 && total > 0 ? "Fatura paga" : "Marcar como paga"}`;
     hydrateIcons(markPaidButton);
   }
 
@@ -2533,32 +2555,104 @@ function renderInvoices() {
 function selectedInvoiceSummary() {
   const month = document.getElementById("invoiceMonthFilter")?.value || new Date().toISOString().slice(0, 7);
   const cardId = selectedInvoiceCardId || state.cards[0]?.id || "";
+  const card = state.cards.find((item) => item.id === cardId);
   const transactions = state.transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId && transaction.date.startsWith(month));
   const total = Math.max(0, sum(transactions.filter((transaction) => transaction.type === "expense")) - sum(transactions.filter((transaction) => transaction.type === "income")));
-  return { month, cardId, total };
+  const payment = getInvoicePayment(cardId, month);
+  const paid = payment?.amount || 0;
+  const remaining = Math.max(0, total - paid);
+  const needsLinkedPayment = total > 0 && paid >= total && !payment?.transactionId;
+  const payable = remaining > 0 ? remaining : needsLinkedPayment ? total : 0;
+  return { month, cardId, card, total, paid, remaining, payment, needsLinkedPayment, payable };
 }
 
 function getInvoicePayment(cardId, month) {
   return (state.invoicePayments || []).find((payment) => payment.cardId === cardId && payment.month === month);
 }
 
-function markSelectedInvoicePaid() {
-  const { cardId, month, total } = selectedInvoiceSummary();
-  if (!cardId || total <= 0) return;
-  const existing = getInvoicePayment(cardId, month);
-  if (existing) {
-    existing.amount = total;
-    existing.paidAt = new Date().toISOString();
-  } else {
-    state.invoicePayments.push({
-      id: makeId(),
-      cardId,
-      month,
-      amount: total,
-      paidAt: new Date().toISOString(),
-    });
+function openInvoicePaymentModal() {
+  const summary = selectedInvoiceSummary();
+  if (!summary.cardId || summary.total <= 0 || summary.payable <= 0) return;
+  const modal = document.getElementById("invoicePaymentModal");
+  const accountSelect = document.getElementById("invoicePaymentAccount");
+  const confirmButton = document.getElementById("confirmInvoicePayment");
+  if (!modal || !accountSelect || !confirmButton) return;
+
+  pendingInvoicePayment = summary;
+  const accounts = calculateAccounts();
+  accountSelect.innerHTML = accounts.length
+    ? accounts.map((account) => `<option value="${account.id}">${escapeHtml(account.name)} - ${money.format(account.balance)}</option>`).join("")
+    : `<option value="">Cadastre uma conta primeiro</option>`;
+  accountSelect.disabled = accounts.length === 0;
+  confirmButton.disabled = accounts.length === 0;
+  setText("invoicePaymentTitle", `Pagar ${summary.card?.name || "fatura"}`);
+  setText("invoicePaymentSummary", summary.needsLinkedPayment
+    ? `A fatura já estava marcada como paga. Agora será criado o lançamento "Pagamento ${paymentMonthLabel(summary.month)} (${summary.card?.name || "Cartão"})".`
+    : `Será criado o lançamento "Pagamento ${paymentMonthLabel(summary.month)} (${summary.card?.name || "Cartão"})".`);
+  setText("invoicePaymentAmount", money.format(summary.payable));
+  setText("invoicePaymentStatus", accounts.length ? "O saldo da conta selecionada será abatido automaticamente." : "Cadastre uma conta antes de pagar a fatura.");
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("has-modal-open");
+  setTimeout(() => accountSelect.focus(), 30);
+}
+
+function closeInvoicePaymentModal() {
+  const modal = document.getElementById("invoicePaymentModal");
+  if (!modal) return;
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+  pendingInvoicePayment = null;
+  if (!document.getElementById("premiumModal")?.classList.contains("open") && !document.getElementById("onboardingModal")?.classList.contains("open")) {
+    document.body.classList.remove("has-modal-open");
   }
+}
+
+function confirmInvoicePayment() {
+  const summary = pendingInvoicePayment || selectedInvoiceSummary();
+  const accountId = getValue("invoicePaymentAccount");
+  if (!summary.cardId || summary.payable <= 0 || !accountId) return;
+
+  const transactionId = makeId();
+  const description = `Pagamento ${paymentMonthLabel(summary.month)} (${summary.card?.name || "Cartão"})`;
+  const existing = getInvoicePayment(summary.cardId, summary.month);
+  const paymentRecord = existing || {
+    id: makeId(),
+    cardId: summary.cardId,
+    month: summary.month,
+    amount: 0,
+    paidAt: new Date().toISOString(),
+  };
+
+  state.transactions.push({
+    id: transactionId,
+    description,
+    type: "expense",
+    amount: summary.payable,
+    date: new Date().toISOString().slice(0, 10),
+    category: "Pagamento de fatura",
+    sourceType: "account",
+    sourceId: accountId,
+    isInvoicePayment: true,
+    invoicePaymentId: paymentRecord.id,
+    invoiceCardId: summary.cardId,
+    invoiceMonth: summary.month,
+  });
+
+  paymentRecord.amount = summary.total;
+  paymentRecord.accountId = accountId;
+  paymentRecord.transactionId = transactionId;
+  paymentRecord.paidAt = new Date().toISOString();
+  if (!existing) {
+    state.invoicePayments.push(paymentRecord);
+  }
+  closeInvoicePaymentModal();
   persistAndRender();
+}
+
+function paymentMonthLabel(month) {
+  const label = new Date(`${month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "long" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function renderFutureInstallments(cardId, month) {
@@ -2700,6 +2794,7 @@ function bindDeleteButtons() {
       state.accounts = state.accounts.filter((account) => account.id !== button.dataset.deleteAccount);
       state.transactions = state.transactions.filter((transaction) => transaction.sourceId !== button.dataset.deleteAccount);
       state.recurringTransactions = state.recurringTransactions.filter((recurring) => recurring.sourceId !== button.dataset.deleteAccount);
+      state.invoicePayments = state.invoicePayments.filter((payment) => payment.accountId !== button.dataset.deleteAccount);
       persistAndRender();
     });
   });
@@ -2747,6 +2842,10 @@ function resetCardForm() {
 function startTransactionEdit(transactionId) {
   const transaction = state.transactions.find((item) => item.id === transactionId);
   if (!transaction) return;
+  if (transaction.isInvoicePayment) {
+    alert("Pagamentos de fatura são lançamentos automáticos. Para alterar, exclua o pagamento e marque a fatura novamente.");
+    return;
+  }
   const isGroup = transaction.installmentGroupId && transaction.installmentCount > 1;
   const editGroup = isGroup && confirm(`Editar todas as ${transaction.installmentCount} parcelas desta compra?`);
   const groupItems = isGroup
@@ -2942,10 +3041,11 @@ function importSelectedPreviewRows() {
 function financialStats() {
   const month = document.getElementById("monthFilter")?.value || new Date().toISOString().slice(0, 7);
   const transactions = state.transactions.filter((transaction) => transaction.date.startsWith(month));
-  const income = sum(transactions.filter((item) => item.type === "income"));
-  const expense = sum(transactions.filter((item) => item.type === "expense"));
+  const reportTransactions = reportableTransactions(transactions);
+  const income = sum(reportTransactions.filter((item) => item.type === "income"));
+  const expense = sum(reportTransactions.filter((item) => item.type === "expense"));
   const cardOpenTotal = calculateCardOpenTotal(transactions);
-  const categories = transactions
+  const categories = reportTransactions
     .filter((item) => item.type === "expense")
     .reduce((acc, item) => {
       acc[item.category] = (acc[item.category] || 0) + item.amount;
@@ -3407,6 +3507,10 @@ function calculateCardOpenTotal(transactions) {
   const cardExpenses = sum(transactions.filter((transaction) => transaction.sourceType === "card" && transaction.type === "expense"));
   const cardCredits = sum(transactions.filter((transaction) => transaction.sourceType === "card" && transaction.type === "income"));
   return Math.max(0, cardExpenses - cardCredits);
+}
+
+function reportableTransactions(transactions) {
+  return transactions.filter((transaction) => !transaction.isInvoicePayment);
 }
 
 function ensureRecurringTransactions() {

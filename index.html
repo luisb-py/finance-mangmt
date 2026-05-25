@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=23" />
+    <link rel="stylesheet" href="styles.css?v=24" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -1241,6 +1241,34 @@
       </div>
     </section>
 
+    <section class="premium-modal invoice-payment-modal" id="invoicePaymentModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="invoicePaymentTitle">
+      <div class="premium-modal-backdrop" data-close-invoice-payment-modal></div>
+      <div class="premium-modal-card invoice-payment-card">
+        <button class="icon-button premium-modal-close" id="closeInvoicePaymentModal" type="button" title="Fechar">
+          <span data-icon="close"></span>
+        </button>
+        <span class="premium-modal-kicker">Pagamento</span>
+        <h2 id="invoicePaymentTitle">Pagar fatura</h2>
+        <p id="invoicePaymentSummary">Selecione a conta usada para pagar esta fatura.</p>
+        <label>
+          Conta de pagamento
+          <select id="invoicePaymentAccount"></select>
+        </label>
+        <div class="invoice-payment-preview">
+          <span>Valor a baixar</span>
+          <strong id="invoicePaymentAmount">R$ 0,00</strong>
+        </div>
+        <div class="premium-modal-actions">
+          <button class="primary-button" id="confirmInvoicePayment" type="button">
+            <span data-icon="check"></span>
+            Confirmar pagamento
+          </button>
+          <button class="secondary-button" id="cancelInvoicePayment" type="button">Cancelar</button>
+        </div>
+        <p class="premium-modal-note" id="invoicePaymentStatus">Será criado um lançamento automático na conta selecionada.</p>
+      </div>
+    </section>
+
     <template id="emptyStateTemplate">
       <div class="empty-state">
         <span data-icon="empty"></span>
@@ -1249,6 +1277,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=36"></script>
+    <script src="app.js?v=38"></script>
   </body>
 </html>
