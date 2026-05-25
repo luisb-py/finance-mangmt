@@ -2340,13 +2340,15 @@ function renderDashboard() {
     : transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === selectedCard));
   const income = sum(dashboardTransactions.filter((item) => item.type === "income"));
   const expense = sum(dashboardTransactions.filter((item) => item.type === "expense"));
-  const cardOpenTotal = calculateCardOpenTotal(dashboardTransactions);
+  const cardStatementTotal = calculateCardStatementTotal(dashboardTransactions);
+  const cardOpenTotal = calculateCardOpenTotal(dashboardTransactions, { month, cardId: selectedCard });
   const allBalance = calculateAccounts().reduce((total, account) => total + account.balance, 0);
 
   setText("totalIncome", money.format(income));
   setText("totalExpense", money.format(expense));
   setText("netBalance", money.format(income - expense));
   setText("cardOpenTotal", money.format(cardOpenTotal));
+  setText("cardOpenStatus", cardStatementTotal > 0 && cardOpenTotal <= 0 ? "Faturas pagas no mês" : cardOpenTotal > 0 ? "Restante das faturas" : "Cartões de crédito");
   setText("sidebarBalance", money.format(allBalance));
   setText("mobileBalance", money.format(allBalance));
   setText("mobileNetBalance", money.format(income - expense));
@@ -2529,7 +2531,7 @@ function renderInvoices() {
 
   renderCollection("invoiceCardsSummary", state.cards.map((item) => {
     const cardTransactions = state.transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === item.id && transaction.date.startsWith(month));
-    const cardTotal = calculateCardOpenTotal(cardTransactions);
+    const cardTotal = calculateCardOpenTotal(cardTransactions, { month, cardId: item.id });
     return { ...item, total: cardTotal, selected: item.id === cardId };
   }), (item) => `
     <button class="list-item invoice-card-button ${item.selected ? "selected-list-item" : ""}" data-select-invoice-card="${item.id}" type="button">
@@ -3044,7 +3046,7 @@ function financialStats() {
   const reportTransactions = reportableTransactions(transactions);
   const income = sum(reportTransactions.filter((item) => item.type === "income"));
   const expense = sum(reportTransactions.filter((item) => item.type === "expense"));
-  const cardOpenTotal = calculateCardOpenTotal(transactions);
+  const cardOpenTotal = calculateCardOpenTotal(transactions, { month });
   const categories = reportTransactions
     .filter((item) => item.type === "expense")
     .reduce((acc, item) => {
@@ -3503,7 +3505,23 @@ function calculateCardUsed(cardId) {
   return Math.max(0, committedExpenses - creditTotal);
 }
 
-function calculateCardOpenTotal(transactions) {
+function calculateCardOpenTotal(transactions, options = {}) {
+  const month = options.month || transactions.find((transaction) => transaction.sourceType === "card")?.date?.slice(0, 7);
+  if (month) {
+    const cardIds = options.cardId && options.cardId !== "all"
+      ? [options.cardId]
+      : [...new Set(transactions.filter((transaction) => transaction.sourceType === "card").map((transaction) => transaction.sourceId))];
+    return cardIds.reduce((total, cardId) => {
+      const cardTransactions = transactions.filter((transaction) => transaction.sourceType === "card" && transaction.sourceId === cardId);
+      const statementTotal = calculateCardStatementTotal(cardTransactions);
+      const paid = Math.min(getInvoicePayment(cardId, month)?.amount || 0, statementTotal);
+      return total + Math.max(0, statementTotal - paid);
+    }, 0);
+  }
+  return calculateCardStatementTotal(transactions);
+}
+
+function calculateCardStatementTotal(transactions) {
   const cardExpenses = sum(transactions.filter((transaction) => transaction.sourceType === "card" && transaction.type === "expense"));
   const cardCredits = sum(transactions.filter((transaction) => transaction.sourceType === "card" && transaction.type === "income"));
   return Math.max(0, cardExpenses - cardCredits);
