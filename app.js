@@ -90,6 +90,7 @@ const icons = {
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>',
   sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 1 1 0 12H7"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M20 16v4H4v-4"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m20 6-11 11-5-5"/></svg>',
@@ -795,6 +796,7 @@ function bindForms() {
   });
   document.getElementById("saveGoal")?.addEventListener("click", saveGoal);
   document.getElementById("markInvoicePaid")?.addEventListener("click", openInvoicePaymentModal);
+  document.getElementById("revertInvoicePayment")?.addEventListener("click", revertSelectedInvoicePayment);
   document.getElementById("confirmInvoicePayment")?.addEventListener("click", confirmInvoicePayment);
   document.getElementById("closeInvoicePaymentModal")?.addEventListener("click", closeInvoicePaymentModal);
   document.getElementById("cancelInvoicePayment")?.addEventListener("click", closeInvoicePaymentModal);
@@ -2509,6 +2511,14 @@ function renderInvoices() {
     markPaidButton.innerHTML = `<span data-icon="check"></span>${needsLinkedPayment ? "Registrar pagamento" : remaining <= 0 && total > 0 ? "Fatura paga" : "Marcar como paga"}`;
     hydrateIcons(markPaidButton);
   }
+  const revertPaymentButton = document.getElementById("revertInvoicePayment");
+  if (revertPaymentButton) {
+    const canRevertPayment = Boolean(card && payment && paid > 0);
+    revertPaymentButton.classList.toggle("hidden", !canRevertPayment);
+    revertPaymentButton.disabled = !canRevertPayment;
+    revertPaymentButton.innerHTML = `<span data-icon="undo"></span>${payment?.transactionId ? "Reverter pagamento" : "Reabrir fatura"}`;
+    hydrateIcons(revertPaymentButton);
+  }
 
   const table = document.getElementById("invoiceTransactionsTable");
   if (table) {
@@ -2649,6 +2659,19 @@ function confirmInvoicePayment() {
     state.invoicePayments.push(paymentRecord);
   }
   closeInvoicePaymentModal();
+  persistAndRender();
+}
+
+function revertSelectedInvoicePayment() {
+  const summary = selectedInvoiceSummary();
+  const payment = summary.payment;
+  if (!payment) return;
+  const transaction = state.transactions.find((item) => item.id === payment.transactionId || item.invoicePaymentId === payment.id);
+  const accountLabel = transaction ? ` e devolver ${money.format(transaction.amount)} para ${sourceName(transaction)}` : "";
+  if (!confirm(`Reverter o pagamento da fatura ${formatMonth(summary.month)}${accountLabel}?`)) return;
+
+  state.transactions = state.transactions.filter((item) => item.id !== payment.transactionId && item.invoicePaymentId !== payment.id);
+  state.invoicePayments = state.invoicePayments.filter((item) => item.id !== payment.id);
   persistAndRender();
 }
 

@@ -1186,8 +1186,26 @@ label textarea:hover {
   color: var(--muted);
 }
 
-.invoice-control-panel .primary-button {
+.invoice-control-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.invoice-control-actions .primary-button,
+.invoice-control-actions .secondary-button {
   white-space: nowrap;
+  width: 100%;
+}
+
+.invoice-revert-button {
+  border-color: rgba(255, 127, 143, 0.38);
+  color: #ffb4bd;
+  background: rgba(255, 127, 143, 0.08);
+}
+
+.invoice-revert-button:hover {
+  border-color: rgba(255, 127, 143, 0.62);
+  background: rgba(255, 127, 143, 0.14);
 }
 
 .recurring-panel {

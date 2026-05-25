@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=24" />
+    <link rel="stylesheet" href="styles.css?v=25" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -577,10 +577,16 @@
               <strong id="invoiceRemainingTotal">R$ 0,00</strong>
             </div>
           </div>
-          <button class="primary-button" id="markInvoicePaid" type="button">
-            <span data-icon="check"></span>
-            Marcar como paga
-          </button>
+          <div class="invoice-control-actions">
+            <button class="primary-button" id="markInvoicePaid" type="button">
+              <span data-icon="check"></span>
+              Marcar como paga
+            </button>
+            <button class="secondary-button invoice-revert-button hidden" id="revertInvoicePayment" type="button">
+              <span data-icon="undo"></span>
+              Reverter pagamento
+            </button>
+          </div>
         </section>
 
         <div class="dashboard-grid">
@@ -1277,6 +1283,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=39"></script>
+    <script src="app.js?v=40"></script>
   </body>
 </html>
