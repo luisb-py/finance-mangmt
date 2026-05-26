@@ -631,6 +631,64 @@ h2 {
   color: var(--green);
 }
 
+.language-switcher {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--control-bg);
+  padding: 3px;
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.language-switcher:hover {
+  border-color: color-mix(in srgb, var(--green) 36%, var(--line));
+  background: var(--control-hover);
+}
+
+.language-option {
+  display: inline-flex;
+  min-width: 42px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 0 8px 0 5px;
+  transition: background 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.language-option:hover {
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.language-option.active {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 34%, transparent);
+}
+
+.flag-circle {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--line) 60%, transparent), 0 8px 18px rgba(0, 0, 0, 0.16);
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .plan-pill[data-plan="premium"] .plan-dot {
   background: var(--green);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 18%, transparent);
@@ -2688,6 +2746,17 @@ button:hover [data-icon],
 
   .topbar-actions button {
     width: 100%;
+  }
+
+  .language-switcher {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .language-option {
+    flex: 1;
+    min-width: 0;
+    padding-right: 6px;
   }
 
   .sync-status,

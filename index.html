@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#062c27" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/logo-green-dark.png" />
-    <link rel="stylesheet" href="styles.css?v=25" />
+    <link rel="stylesheet" href="styles.css?v=26" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -165,6 +165,20 @@
           <div class="plan-pill" id="planPill" data-plan="free" title="Plano atual">
             <span class="plan-dot"></span>
             <span id="planPillText">Plano Free</span>
+          </div>
+          <div class="language-switcher" id="languageSwitcher" aria-label="Idioma" title="Idioma">
+            <button class="language-option active" type="button" data-language="pt-BR" aria-label="Português">
+              <span class="flag-circle">🇧🇷</span>
+              <span>PT</span>
+            </button>
+            <button class="language-option" type="button" data-language="en-US" aria-label="Inglês">
+              <span class="flag-circle">🇺🇸</span>
+              <span>EN</span>
+            </button>
+            <button class="language-option" type="button" data-language="es-ES" aria-label="Espanhol">
+              <span class="flag-circle">🇪🇸</span>
+              <span>ES</span>
+            </button>
           </div>
           <button class="theme-toggle" id="themeToggle" type="button" title="Alternar tema" aria-label="Alternar tema">
             <span class="theme-toggle-track">
@@ -1283,6 +1297,7 @@
       </div>
     </template>
 
-    <script src="app.js?v=40"></script>
+    <script src="translations.js?v=1"></script>
+    <script src="app.js?v=41"></script>
   </body>
 </html>

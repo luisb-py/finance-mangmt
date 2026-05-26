@@ -2,6 +2,7 @@ const STORAGE_KEY = "personalFinanceApp.v1";
 const SESSION_KEY = "personalFinanceApp.session";
 const INVESTMENT_PROFILE_KEY = "personalFinanceApp.investmentProfile";
 const APP_OWNER_KEY = "personalFinanceApp.owner";
+const LANGUAGE_KEY = "personalFinanceApp.language";
 
 const PLAN_LIMITS = {
   free: {
@@ -78,10 +79,11 @@ let stripeCheckoutWatchdogTimer = null;
 let stripeCheckoutWindow = null;
 let stripeCheckoutLoading = false;
 let serviceWorkerReloading = false;
-const money = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
+let currentLanguage = localStorage.getItem(LANGUAGE_KEY) || "pt-BR";
+const I18N = window.FINANCE_I18N || { languages: { "pt-BR": { label: "Português", short: "PT" } }, translations: {} };
+if (!I18N.languages[currentLanguage]) currentLanguage = "pt-BR";
+const textNodeSources = new WeakMap();
+let money = createMoneyFormatter();
 
 const icons = {
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
@@ -116,6 +118,7 @@ const icons = {
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   hydrateIcons();
+  bindLanguageSwitcher();
   bindLogin();
   bindTabs();
   bindForms();
@@ -139,6 +142,146 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("resize", debounce(syncTransactionsTableScroll, 120));
   registerServiceWorker();
 });
+
+function createMoneyFormatter() {
+  return new Intl.NumberFormat(languageLocale(), {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function languageLocale() {
+  if (currentLanguage === "en-US") return "en-US";
+  if (currentLanguage === "es-ES") return "es-ES";
+  return "pt-BR";
+}
+
+function bindLanguageSwitcher() {
+  document.querySelectorAll("[data-language]").forEach((button) => {
+    button.addEventListener("click", () => setLanguage(button.dataset.language));
+  });
+  updateLanguageSwitcher();
+}
+
+function setLanguage(language) {
+  if (!I18N.languages[language] || language === currentLanguage) return;
+  currentLanguage = language;
+  localStorage.setItem(LANGUAGE_KEY, language);
+  money = createMoneyFormatter();
+  render();
+}
+
+function updateLanguageSwitcher() {
+  document.documentElement.lang = currentLanguage;
+  document.querySelectorAll("[data-language]").forEach((button) => {
+    const active = button.dataset.language === currentLanguage;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function translateText(text, language = currentLanguage) {
+  if (!text || language === "pt-BR") return text;
+  const direct = I18N.translations[text]?.[language];
+  if (direct) return direct;
+  return translatePattern(text, language);
+}
+
+function translatePattern(text, language = currentLanguage) {
+  const greeting = text.match(/^Olá, (.+)\.$/);
+  if (greeting) return language === "en-US" ? `Hello, ${greeting[1]}.` : `Hola, ${greeting[1]}.`;
+
+  const invoiceNeedsAccount = text.match(/^Fatura (.+) do (.+) marcada como paga\. Selecione uma conta para abater o saldo\.$/);
+  if (invoiceNeedsAccount) {
+    return language === "en-US"
+      ? `Statement ${invoiceNeedsAccount[1]} for ${invoiceNeedsAccount[2]} is marked as paid. Select an account to deduct the balance.`
+      : `Factura ${invoiceNeedsAccount[1]} de ${invoiceNeedsAccount[2]} marcada como pagada. Selecciona una cuenta para descontar el saldo.`;
+  }
+
+  const invoicePaid = text.match(/^Fatura (.+) do (.+) marcada como paga\.$/);
+  if (invoicePaid) {
+    return language === "en-US"
+      ? `Statement ${invoicePaid[1]} for ${invoicePaid[2]} marked as paid.`
+      : `Factura ${invoicePaid[1]} de ${invoicePaid[2]} marcada como pagada.`;
+  }
+
+  const invoiceOpen = text.match(/^Fatura (.+) do (.+) ainda tem (.+) em aberto\.$/);
+  if (invoiceOpen) {
+    return language === "en-US"
+      ? `Statement ${invoiceOpen[1]} for ${invoiceOpen[2]} still has ${invoiceOpen[3]} open.`
+      : `Factura ${invoiceOpen[1]} de ${invoiceOpen[2]} aún tiene ${invoiceOpen[3]} pendiente.`;
+  }
+
+  const payTitle = text.match(/^Pagar (.+)$/);
+  if (payTitle) return language === "en-US" ? `Pay ${payTitle[1]}` : `Pagar ${payTitle[1]}`;
+
+  const createPayment = text.match(/^Será criado o lançamento "(.+)"\.$/);
+  if (createPayment) {
+    return language === "en-US"
+      ? `The transaction "${createPayment[1]}" will be created.`
+      : `Se creará el movimiento "${createPayment[1]}".`;
+  }
+
+  const createOldPayment = text.match(/^A fatura já estava marcada como paga\. Agora será criado o lançamento "(.+)"\.$/);
+  if (createOldPayment) {
+    return language === "en-US"
+      ? `The statement was already marked as paid. Now the transaction "${createOldPayment[1]}" will be created.`
+      : `La factura ya estaba marcada como pagada. Ahora se creará el movimiento "${createOldPayment[1]}".`;
+  }
+
+  const freeUsage = text.match(/^Uso do plano: (.+)$/);
+  if (freeUsage) return language === "en-US" ? `Plan usage: ${freeUsage[1]}` : `Uso del plan: ${freeUsage[1]}`;
+
+  const currentPlan = text.match(/^Plano atual: (.+)$/);
+  if (currentPlan) return language === "en-US" ? `Current plan: ${currentPlan[1]}` : `Plan actual: ${currentPlan[1]}`;
+
+  return text;
+}
+
+function applyLanguage(root = document) {
+  updateLanguageSwitcher();
+  document.title = translateText("Minha Gestão Financeira");
+  translateAttributes(root);
+  translateTextNodes(root);
+}
+
+function translateAttributes(root) {
+  const attributes = ["placeholder", "title", "aria-label"];
+  const selector = attributes.map((attribute) => `[${attribute}]`).join(",");
+  const nodes = root.matches?.(selector) ? [root, ...root.querySelectorAll(selector)] : [...root.querySelectorAll(selector)];
+  nodes.forEach((node) => {
+    attributes.forEach((attribute) => {
+      if (!node.hasAttribute(attribute)) return;
+      const sourceAttribute = `data-i18n-${attribute}-source`;
+      const source = node.getAttribute(sourceAttribute) || node.getAttribute(attribute);
+      node.setAttribute(sourceAttribute, source);
+      node.setAttribute(attribute, translateText(source));
+    });
+  });
+}
+
+function translateTextNodes(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent || ["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "CANVAS"].includes(parent.tagName)) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    const source = textNodeSources.get(node) || node.textContent.trim();
+    textNodeSources.set(node, source);
+    const translated = translateText(source);
+    const leading = node.textContent.match(/^\s*/)?.[0] || "";
+    const trailing = node.textContent.match(/\s*$/)?.[0] || "";
+    node.textContent = `${leading}${translated}${trailing}`;
+  });
+}
 
 function loadState() {
   try {
@@ -619,7 +762,7 @@ async function startStripeCheckout() {
   const session = currentSession();
   if (stripeCheckoutLoading) return;
   if (!session?.accessToken) {
-    note.textContent = "Entre na sua conta antes de assinar o Premium.";
+    note.textContent = translateText("Entre na sua conta antes de assinar o Premium.");
     return;
   }
 
@@ -652,7 +795,7 @@ async function startStripeCheckout() {
       return;
     }
 
-    note.textContent = "Redirecionando para o checkout seguro do Stripe...";
+    note.textContent = translateText("Redirecionando para o checkout seguro do Stripe...");
     clearTimeout(stripeCheckoutWatchdogTimer);
     stripeCheckoutWatchdogTimer = null;
     window.location.assign(data.url);
@@ -689,7 +832,7 @@ function setPremiumCheckoutLoading(isLoading, message) {
   const note = document.getElementById("premiumModalNote");
   const button = document.getElementById("premiumSubscribeButton");
   stripeCheckoutLoading = isLoading;
-  if (note) note.textContent = message;
+  if (note) note.textContent = translateText(message);
   if (button) button.disabled = isLoading;
 }
 
@@ -741,7 +884,7 @@ function setSyncStatus(status, timestamp = null) {
     saved: timestamp ? `Salvo ${formatRelativeSyncTime(timestamp)}` : "Salvo agora",
     error: "Erro ao salvar",
   };
-  text.textContent = labels[status] || "Local";
+  text.textContent = translateText(labels[status] || "Local");
 }
 
 function formatRelativeSyncTime(timestamp) {
@@ -757,6 +900,7 @@ function hydrateIcons(root = document) {
   root.querySelectorAll("[data-icon]").forEach((node) => {
     node.innerHTML = icons[node.dataset.icon] || "";
   });
+  if (document.body && root !== document) applyLanguage(root);
 }
 
 function bindTabs() {
@@ -1995,6 +2139,7 @@ function render() {
   loadInvestmentProfile();
   renderInvestmentSummary();
   renderPlannerMetrics();
+  applyLanguage();
 }
 
 function renderProfile() {
@@ -2676,7 +2821,7 @@ function revertSelectedInvoicePayment() {
 }
 
 function paymentMonthLabel(month) {
-  const label = new Date(`${month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "long" });
+  const label = new Date(`${month}-01T00:00:00`).toLocaleDateString(languageLocale(), { month: "long" });
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -3420,7 +3565,8 @@ function cssVar(name) {
 
 function compactMoney(value) {
   if (Math.abs(value) >= 1000) {
-    return `R$ ${(value / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
+    const compactValue = (value / 1000).toLocaleString(languageLocale(), { maximumFractionDigits: 1 });
+    return currentLanguage === "en-US" ? `R$ ${compactValue}K` : `R$ ${compactValue} mil`;
   }
   return money.format(value);
 }
@@ -3697,15 +3843,17 @@ function sum(items) {
 }
 
 function setText(id, value) {
-  document.getElementById(id).textContent = value;
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.textContent = translateText(String(value));
 }
 
 function formatDate(date) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString("pt-BR");
+  return new Date(`${date}T00:00:00`).toLocaleDateString(languageLocale());
 }
 
 function formatMonth(month) {
-  return new Date(`${month}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString(languageLocale(), { month: "long", year: "numeric" });
 }
 
 function invoiceDueDate(month, closeDay) {
