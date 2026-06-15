@@ -3523,3 +3523,612 @@ td {
     bottom: calc(124px + env(safe-area-inset-bottom));
   }
 }
+
+/* Organizze-inspired redesign */
+body[data-theme="light"] {
+  --bg: #f4fbf8;
+  --bg-soft: #e7f7f0;
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --surface-soft: #eef9f4;
+  --ink: #12312b;
+  --muted: #6e837d;
+  --line: rgba(18, 49, 43, 0.09);
+  --line-strong: rgba(18, 49, 43, 0.15);
+  --green: #12b981;
+  --red: #ef5b68;
+  --blue: #1ba7d8;
+  --gold: #f3aa28;
+  --violet: #12b981;
+  --cyan: #1ab7a6;
+  --shadow: 0 18px 45px rgba(27, 84, 73, 0.09);
+  --panel-hover: #ffffff;
+  --control-bg: #f4faf7;
+  --control-hover: #ffffff;
+  --metric-bg: #ffffff;
+  --metric-hover: #f8fffc;
+  --chart-grid: rgba(18, 49, 43, 0.08);
+  --chart-hole: #ffffff;
+  --chart-text: #12312b;
+  --chart-muted: #6e837d;
+}
+
+body:not([data-theme="light"]) {
+  --bg: #062521;
+  --bg-soft: #0b3832;
+  --surface: rgba(12, 45, 40, 0.92);
+  --surface-strong: #0f3a34;
+  --surface-soft: #123f38;
+  --ink: #effff9;
+  --muted: #a4c6bd;
+  --line: rgba(215, 255, 239, 0.1);
+  --line-strong: rgba(215, 255, 239, 0.18);
+  --green: #45e58f;
+  --blue: #50c8ff;
+  --cyan: #2dd4bf;
+  --panel-hover: rgba(16, 55, 49, 0.98);
+  --control-bg: rgba(234, 255, 246, 0.07);
+  --control-hover: rgba(234, 255, 246, 0.12);
+  --chart-hole: #0a2c27;
+}
+
+body {
+  background:
+    radial-gradient(circle at 22% -10%, color-mix(in srgb, var(--green) 18%, transparent), transparent 26rem),
+    linear-gradient(180deg, var(--bg-soft) 0, var(--bg) 340px),
+    var(--bg);
+}
+
+body[data-theme="light"] .login-screen {
+  background:
+    radial-gradient(circle at 35% 20%, rgba(18, 185, 129, 0.22), transparent 24rem),
+    rgba(244, 251, 248, 0.86);
+}
+
+body[data-theme="light"] .login-card,
+body[data-theme="light"] .onboarding-card,
+body[data-theme="light"] .premium-modal-card,
+body[data-theme="light"] .invoice-payment-card {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 30px 80px rgba(27, 84, 73, 0.13);
+}
+
+.sidebar {
+  border-right: 0;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  box-shadow: 12px 0 35px rgba(18, 49, 43, 0.05);
+}
+
+body:not([data-theme="light"]) .sidebar {
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  box-shadow: none;
+}
+
+.brand {
+  min-height: 54px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0b5b4f, #13b981);
+  box-shadow: 0 14px 28px rgba(18, 185, 129, 0.22);
+}
+
+body[data-theme="light"] .brand-mark {
+  background: linear-gradient(135deg, #0b5b4f, #13b981);
+  box-shadow: 0 14px 28px rgba(18, 185, 129, 0.22);
+}
+
+.brand strong {
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.nav-tabs {
+  gap: 5px;
+}
+
+.nav-tab {
+  min-height: 44px;
+  border-radius: 14px;
+  color: color-mix(in srgb, var(--muted) 92%, var(--ink));
+  padding: 0 12px;
+}
+
+.nav-tab.active,
+.nav-tab:hover {
+  background: color-mix(in srgb, var(--green) 11%, transparent) !important;
+  color: color-mix(in srgb, var(--green) 64%, var(--ink));
+}
+
+.nav-tab.active::before {
+  display: none;
+}
+
+.nav-tab.active [data-icon],
+.nav-tab:hover [data-icon] {
+  color: var(--green);
+}
+
+.sidebar-footer {
+  border-top: 0;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  padding: 14px;
+}
+
+.sidebar-footer span {
+  display: block;
+}
+
+.sidebar-footer strong {
+  color: var(--green);
+  font-size: 1.22rem;
+}
+
+.app-shell {
+  padding: 34px;
+}
+
+.topbar {
+  min-height: 62px;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.welcome-message {
+  color: var(--ink);
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  font-weight: 850;
+}
+
+.topbar > div:first-child::after {
+  content: "Finanças claras para decidir melhor.";
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 560;
+}
+
+.sync-status,
+.plan-pill,
+.language-switcher,
+.icon-button,
+.theme-toggle-track {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+body[data-theme="light"] .sync-status,
+body[data-theme="light"] .plan-pill,
+body[data-theme="light"] .language-switcher,
+body[data-theme="light"] .icon-button,
+body[data-theme="light"] .theme-toggle-track {
+  box-shadow: 0 10px 24px rgba(27, 84, 73, 0.07);
+}
+
+.dashboard-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  border: 0;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--green) 12%, transparent), transparent 60%),
+    var(--surface);
+  box-shadow: var(--shadow) !important;
+  padding: 18px;
+}
+
+.dashboard-toolbar > div:first-child {
+  display: block;
+}
+
+.dashboard-toolbar .eyebrow {
+  display: block;
+  color: var(--green);
+  font-size: 0.7rem;
+}
+
+.dashboard-toolbar strong {
+  color: var(--ink);
+  font-size: 1.18rem;
+}
+
+.dashboard-filters {
+  min-height: 44px;
+  border: 0;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+#monthFilter,
+#invoiceMonthFilter,
+#dashboardCardFilter {
+  min-height: 42px;
+  font-weight: 760;
+}
+
+#dashboard .metric-grid,
+.invoice-metrics {
+  gap: 14px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+#dashboard .metric,
+.invoice-metrics .metric {
+  min-height: 108px;
+  border: 0;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.34)),
+    var(--surface);
+  box-shadow: var(--shadow) !important;
+  padding: 20px;
+}
+
+body:not([data-theme="light"]) #dashboard .metric,
+body:not([data-theme="light"]) .invoice-metrics .metric {
+  background: var(--surface);
+}
+
+#dashboard .metric:not(:last-child),
+.invoice-metrics .metric:not(:last-child) {
+  border-right: 0;
+}
+
+#dashboard .metric::before,
+.invoice-metrics .metric::before {
+  display: block;
+  inset: auto auto 18px 20px;
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+#dashboard .metric-icon,
+.invoice-metrics .metric-icon {
+  display: grid;
+}
+
+#dashboard .metric span,
+.invoice-metrics .metric span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+#dashboard .metric strong,
+.invoice-metrics .metric strong {
+  margin-top: 9px;
+  color: var(--ink);
+  font-size: clamp(1.42rem, 2.1vw, 1.75rem);
+  font-weight: 860;
+}
+
+#dashboard .metric:hover,
+.invoice-metrics .metric:hover {
+  background: var(--surface);
+  transform: translateY(-2px);
+}
+
+.dashboard-details > summary,
+.panel,
+.profile-hero,
+.planner-hero {
+  border: 0;
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow) !important;
+}
+
+.dashboard-details > summary {
+  min-height: 58px;
+  padding: 0 18px;
+}
+
+.dashboard-details > summary span {
+  font-weight: 820;
+}
+
+.dashboard-details > summary::after {
+  border: 0;
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+
+.dashboard-grid,
+.work-grid,
+.dashboard-support-grid {
+  gap: 18px;
+}
+
+.panel {
+  padding: 22px;
+}
+
+.panel:hover {
+  background: var(--surface);
+  transform: translateY(-2px);
+}
+
+.panel .eyebrow {
+  display: block;
+  color: var(--green);
+}
+
+.panel-header {
+  margin-bottom: 18px;
+}
+
+h2 {
+  color: var(--ink);
+  font-size: 1.08rem;
+  font-weight: 820;
+}
+
+.panel-header select,
+.search,
+label input,
+label select,
+label textarea,
+.ai-input-row input {
+  min-height: 46px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  padding-inline: 14px;
+}
+
+label textarea {
+  min-height: 138px;
+  padding: 14px;
+}
+
+.panel-header select:focus,
+.search:focus,
+label input:focus,
+label select:focus,
+label textarea:focus,
+.ai-input-row input:focus {
+  border-color: color-mix(in srgb, var(--green) 42%, transparent);
+  background: var(--surface);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 13%, transparent);
+}
+
+label {
+  color: color-mix(in srgb, var(--muted) 90%, var(--ink));
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
+.primary-button {
+  min-height: 46px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--green), #09956a);
+  color: #ffffff;
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--green) 28%, transparent);
+}
+
+.secondary-button {
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.list-item {
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface-soft);
+  padding: 14px;
+}
+
+.list-item:not(:last-child) {
+  border-bottom: 0;
+}
+
+.list-item:hover {
+  background: color-mix(in srgb, var(--green) 8%, var(--surface-soft));
+}
+
+.selected-list-item,
+.invoice-card-button.selected-list-item {
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 28%, transparent) !important;
+}
+
+.table-panel {
+  min-height: 500px;
+}
+
+.table-wrap {
+  border-radius: 18px;
+  background: var(--surface-soft);
+}
+
+th {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+td {
+  color: color-mix(in srgb, var(--ink) 84%, var(--muted));
+}
+
+.bank-brand {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.bank-logo {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 13px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand-color) 18%, #ffffff), #ffffff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-color) 20%, transparent);
+}
+
+body:not([data-theme="light"]) .bank-logo {
+  background: color-mix(in srgb, var(--brand-color) 24%, var(--surface-strong));
+}
+
+.bank-logo img {
+  display: block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.bank-logo-fallback {
+  color: var(--brand-color);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.bank-brand-text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.bank-brand-text strong {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-brand-text small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 740;
+}
+
+.list-row > .bank-brand {
+  flex: 1;
+}
+
+.health-score,
+.progress span {
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+}
+
+.quick-entry-fab,
+.ai-fab,
+.calculator-fab {
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--green) 30%, transparent);
+}
+
+@media (max-width: 1040px) {
+  .app-shell {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    box-shadow: 0 18px 52px rgba(18, 49, 43, 0.12);
+  }
+
+  body:not([data-theme="light"]) .sidebar {
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+  }
+
+  .topbar > div:first-child::after {
+    display: none;
+  }
+
+  .dashboard-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-radius: 20px;
+    padding: 14px;
+  }
+
+  .dashboard-toolbar > div:first-child {
+    display: none;
+  }
+
+  .mobile-summary > div,
+  .mobile-summary-action {
+    border: 0;
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow) !important;
+  }
+
+  .invoice-metrics {
+    gap: 12px;
+  }
+
+  .invoice-metrics .metric {
+    border-radius: 18px;
+  }
+
+  .invoice-metrics .metric:nth-child(-n + 2) {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 460px) {
+  .app-shell {
+    padding: 18px 12px 32px;
+  }
+
+  .welcome-message {
+    font-size: 1.25rem;
+  }
+
+  .dashboard-toolbar {
+    gap: 9px;
+  }
+
+  .dashboard-filters {
+    min-height: 40px;
+  }
+
+  #monthFilter,
+  #invoiceMonthFilter,
+  #dashboardCardFilter {
+    min-height: 40px;
+    padding-left: 40px !important;
+    padding-right: 32px !important;
+    font-size: 0.8rem;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .bank-logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+  }
+
+  .bank-logo img {
+    width: 22px;
+    height: 22px;
+  }
+}
