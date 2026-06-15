@@ -3,6 +3,8 @@ const SESSION_KEY = "personalFinanceApp.session";
 const INVESTMENT_PROFILE_KEY = "personalFinanceApp.investmentProfile";
 const APP_OWNER_KEY = "personalFinanceApp.owner";
 const LANGUAGE_KEY = "personalFinanceApp.language";
+const THEME_DESIGN_KEY = "personalFinanceApp.themeDesign";
+const CURRENT_THEME_DESIGN = "organizze-inspired-2026-06";
 
 const PLAN_LIMITS = {
   free: {
@@ -114,6 +116,42 @@ const icons = {
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>',
   empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/><path d="M21 9 13.5 16.5 9.5 12.5 3 19"/></svg>',
 };
+
+const BANK_BRANDS = [
+  bankBrand("Itaú", "itau.com.br", "#ff7a00", ["itau", "itaú", "itaucard", "itaúcard", "iti", "ion itau", "ion itaú", "personnalite", "personnalité"]),
+  bankBrand("Nubank", "nubank.com.br", "#820ad1", ["nubank", "nu bank", "nu", "roxinho", "ultravioleta", "nu pagamentos"]),
+  bankBrand("Bradesco", "bradesco.com.br", "#cc092f", ["bradesco", "bradesco prime", "next", "next bank", "banco next"]),
+  bankBrand("Banco do Brasil", "bb.com.br", "#f8dd00", ["banco do brasil", "bb", "ourocard", "bb estilo", "bb americas"]),
+  bankBrand("Caixa", "caixa.gov.br", "#0066b3", ["caixa", "caixa economica", "caixa econômica", "cef", "caixa tem"]),
+  bankBrand("Santander", "santander.com.br", "#e40000", ["santander", "sx", "free santander", "esfera"]),
+  bankBrand("Inter", "bancointer.com.br", "#ff7a00", ["inter", "banco inter", "intermedium", "inter bank", "super app inter"]),
+  bankBrand("BTG Pactual", "btgpactual.com", "#111827", ["btg", "btg pactual", "btg+", "btg plus", "btg banking"]),
+  bankBrand("XP", "xpi.com.br", "#111827", ["xp", "xp investimentos", "xp visa", "xp bank"]),
+  bankBrand("C6 Bank", "c6bank.com.br", "#242424", ["c6", "c6 bank", "c6bank", "carbon", "c6 carbon"]),
+  bankBrand("PicPay", "picpay.com", "#11c76f", ["picpay", "pic pay", "picpay card", "picpay bank"]),
+  bankBrand("Mercado Pago", "mercadopago.com.br", "#00a6de", ["mercado pago", "mercadopago", "mercado livre", "mpago", "mp"]),
+  bankBrand("PagBank", "pagbank.com.br", "#ffd000", ["pagbank", "pag bank", "pagseguro", "pag seguro", "uol pagseguro"]),
+  bankBrand("Neon", "neon.com.br", "#00e1ff", ["neon", "banco neon", "neon pagamentos"]),
+  bankBrand("Will Bank", "willbank.com.br", "#f6d400", ["will", "will bank", "willbank", "meu will"]),
+  bankBrand("Original", "original.com.br", "#00a859", ["original", "banco original"]),
+  bankBrand("Banrisul", "banrisul.com.br", "#0084c7", ["banrisul", "banco banrisul"]),
+  bankBrand("Sicredi", "sicredi.com.br", "#40ae2a", ["sicredi", "cooperativa sicredi"]),
+  bankBrand("Sicoob", "sicoob.com.br", "#00a091", ["sicoob", "bancoob", "sicoobcard"]),
+  bankBrand("Unicred", "unicred.com.br", "#00856f", ["unicred", "unicred visa"]),
+  bankBrand("Safra", "safra.com.br", "#0b4f9c", ["safra", "banco safra", "safra pay"]),
+  bankBrand("Daycoval", "daycoval.com.br", "#193b73", ["daycoval", "banco daycoval"]),
+  bankBrand("Pan", "bancopan.com.br", "#22c55e", ["pan", "banco pan", "panamericano"]),
+  bankBrand("BMG", "bancobmg.com.br", "#f47b20", ["bmg", "banco bmg", "meu bmg"]),
+  bankBrand("BS2", "bs2.com", "#111827", ["bs2", "banco bs2"]),
+  bankBrand("BV", "bv.com.br", "#00a3e0", ["bv", "banco bv", "votorantim", "banco votorantim"]),
+  bankBrand("Carrefour", "carrefoursolucoes.com.br", "#1f5aa6", ["carrefour", "banco carrefour", "cartao carrefour", "cartão carrefour"]),
+  bankBrand("Porto Bank", "portoseguro.com.br", "#00a1df", ["porto", "porto seguro", "porto bank", "porto seguro bank"]),
+  bankBrand("Ame", "amedigital.com", "#ec008c", ["ame", "ame digital", "amex ame"]),
+  bankBrand("Visa", "visa.com.br", "#1a1f71", ["visa"]),
+  bankBrand("Mastercard", "mastercard.com.br", "#eb001b", ["mastercard", "master card", "master"]),
+  bankBrand("Elo", "elo.com.br", "#111827", ["elo"]),
+  bankBrand("American Express", "americanexpress.com", "#006fcf", ["american express", "amex"]),
+];
 
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
@@ -900,7 +938,82 @@ function hydrateIcons(root = document) {
   root.querySelectorAll("[data-icon]").forEach((node) => {
     node.innerHTML = icons[node.dataset.icon] || "";
   });
+  hydrateBankLogos(root);
   if (document.body && root !== document) applyLanguage(root);
+}
+
+function hydrateBankLogos(root = document) {
+  root.querySelectorAll("img[data-bank-fallback]").forEach((image) => {
+    const fallback = () => fallbackBankLogo(image);
+    image.addEventListener("error", fallback, { once: true });
+    if (image.complete && !image.naturalWidth) fallback();
+  });
+}
+
+function fallbackBankLogo(image) {
+  const fallback = image.dataset.bankFallback || "R$";
+  const logo = image.closest(".bank-logo");
+  if (logo) {
+    logo.classList.add("bank-logo-fallback");
+    logo.textContent = fallback;
+  }
+}
+
+function bankBrand(label, domain, color, aliases) {
+  return {
+    label,
+    domain,
+    color,
+    aliases: aliases.map(normalizeBrandName),
+    logo: `https://www.google.com/s2/favicons?domain=${domain}&sz=96`,
+  };
+}
+
+function normalizeBrandName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function detectBankBrand(name) {
+  const normalized = ` ${normalizeBrandName(name)} `;
+  if (!normalized.trim()) return null;
+  return BANK_BRANDS.find((brand) =>
+    brand.aliases.some((alias) => alias && (normalized === ` ${alias} ` || normalized.includes(` ${alias} `)))
+  ) || null;
+}
+
+function brandInitials(name) {
+  return normalizeBrandName(name)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "R$";
+}
+
+function bankBrandMarkup(name, type = "account") {
+  const brand = detectBankBrand(name);
+  const label = brand?.label || name;
+  const color = brand?.color || (type === "card" ? "var(--blue)" : "var(--green)");
+  const fallback = brandInitials(label);
+  const logo = brand
+    ? `<img src="${brand.logo}" alt="${escapeHtml(label)}" loading="lazy" referrerpolicy="no-referrer" data-bank-fallback="${escapeHtml(fallback)}" />`
+    : `<span>${escapeHtml(brandInitials(name))}</span>`;
+
+  return `
+    <span class="bank-brand" style="--brand-color: ${escapeHtml(color)}" title="${escapeHtml(label)}">
+      <span class="bank-logo ${brand ? "" : "bank-logo-fallback"}">${logo}</span>
+      <span class="bank-brand-text">
+        <strong>${escapeHtml(name)}</strong>
+        ${brand ? `<small>${escapeHtml(brand.label)}</small>` : ""}
+      </span>
+    </span>
+  `;
 }
 
 function bindTabs() {
@@ -1238,7 +1351,10 @@ function bindTableScroll() {
 
 function initTheme() {
   const storedTheme = localStorage.getItem("personalFinanceApp.theme");
-  setTheme(storedTheme || "dark");
+  const storedDesign = localStorage.getItem(THEME_DESIGN_KEY);
+  const nextTheme = storedDesign === CURRENT_THEME_DESIGN ? storedTheme || "light" : "light";
+  localStorage.setItem(THEME_DESIGN_KEY, CURRENT_THEME_DESIGN);
+  setTheme(nextTheme);
   document.getElementById("themeToggle").addEventListener("click", () => {
     setTheme(document.body.dataset.theme === "light" ? "dark" : "light");
     scheduleDashboardRender();
@@ -2691,7 +2807,7 @@ function renderInvoices() {
   }), (item) => `
     <button class="list-item invoice-card-button ${item.selected ? "selected-list-item" : ""}" data-select-invoice-card="${item.id}" type="button">
       <div class="list-row">
-        <strong>${escapeHtml(item.name)}</strong>
+        ${bankBrandMarkup(item.name, "card")}
         <span>${money.format(item.total)}</span>
       </div>
       <div class="list-row subtle">
@@ -2891,7 +3007,7 @@ function renderAccountsAndCards() {
   renderCollection("accountsList", calculateAccounts(), (account) => `
     <div class="list-item">
       <div class="list-row">
-        <strong>${escapeHtml(account.name)}</strong>
+        ${bankBrandMarkup(account.name, "account")}
         <button class="delete-button" data-delete-account="${account.id}" title="Excluir"><span data-icon="trash"></span></button>
       </div>
       <div class="list-row subtle">
@@ -2908,7 +3024,7 @@ function renderAccountsAndCards() {
   renderCollection("cardsList", calculateCards(), (card) => `
     <div class="list-item">
       <div class="list-row">
-        <strong>${escapeHtml(card.name)}</strong>
+        ${bankBrandMarkup(card.name, "card")}
         <span class="list-actions">
           <button class="edit-button" data-edit-card="${card.id}" title="Editar"><span data-icon="edit"></span></button>
           <button class="delete-button" data-delete-card="${card.id}" title="Excluir"><span data-icon="trash"></span></button>
@@ -2933,7 +3049,7 @@ function renderSummaryLists() {
   renderCollection("accountSummary", calculateAccounts(), (account) => `
     <div class="list-item">
       <div class="list-row">
-        <strong>${escapeHtml(account.name)}</strong>
+        ${bankBrandMarkup(account.name, "account")}
         <strong>${money.format(account.balance)}</strong>
       </div>
     </div>
@@ -2944,7 +3060,7 @@ function renderSummaryLists() {
   renderCollection("cardSummary", cards, (card) => `
     <div class="list-item">
       <div class="list-row">
-        <strong>${escapeHtml(card.name)}</strong>
+        ${bankBrandMarkup(card.name, "card")}
         <span>${money.format(card.available)}</span>
       </div>
       <div class="progress"><span style="width: ${Math.min(card.usedPercent, 100)}%"></span></div>
